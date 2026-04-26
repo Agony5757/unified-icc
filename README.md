@@ -3,7 +3,6 @@
 **ICC** = **I**nteractive **C**oding **CLI**（交互式编程命令行）—— 一个与平台无关的网关，通过 tmux 管理 AI 编程助手（Claude Code、Codex CLI、Gemini CLI、Pi 等）。
 
 [![CI](https://github.com/Agony5757/unified-icc/actions/workflows/ci.yml/badge.svg)](https://github.com/Agony5757/unified-icc/actions)
-[![PyPI version](https://badge.fury.io/py/unified-icc.svg)](https://badge.fury.io/py/unified-icc)
 
 Unified ICC 从 [ccgram](https://github.com/alexei-led/ccgram) 中提取核心逻辑为一个可复用的 Python 库，使任何消息前端（飞书、Telegram、Discord、Slack……）都能通过简洁的异步 API 驱动 AI 编程会话。
 
