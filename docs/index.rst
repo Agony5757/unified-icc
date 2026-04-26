@@ -1,10 +1,12 @@
-# Welcome to Unified ICC
+Welcome to Unified ICC
+=======================
 
-**ICC** = **I**nteractive **C**oding **CLI** — a platform-agnostic gateway for managing AI coding agents (Claude Code, Codex CLI, etc.) via tmux.
+**ICC** = **I**nteractive **C**oding **CLI** — a platform-agnostic gateway for managing AI coding agents (Claude Code, Codex CLI, Gemini CLI, Pi, etc.) via tmux.
 
-Unified ICC extracts the core logic from [ccgram](https://github.com/alexei-led/ccgram) into a reusable Python library, enabling any messaging frontend (Feishu, Telegram, Discord, Slack...) to drive AI coding sessions through a clean async API.
+Unified ICC extracts the core logic from `ccgram <https://github.com/alexei-led/ccgram>`_ into a reusable Python library, enabling any messaging frontend (Feishu, Telegram, Discord, Slack...) to drive AI coding sessions through a clean async API.
 
-## Key Features
+Key Features
+------------
 
 - **Platform-agnostic**: No Telegram, Slack, or other messaging platform dependencies in the core library
 - **Multi-provider support**: Seamlessly manage Claude Code, Codex CLI, Gemini CLI, Pi, and Shell sessions
@@ -12,74 +14,81 @@ Unified ICC extracts the core logic from [ccgram](https://github.com/alexei-led/
 - **Event-driven**: Subscribe to messages, status changes, window events, and hooks
 - **State persistence**: Debounced JSON persistence with crash recovery
 
-## Documentation Sections
+Documentation Sections
+----------------------
 
-```{toctree}
-:maxdepth: 2
-:caption: Contents
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents
 
-getting-started/index
-getting-started/installation
-getting-started/first-steps
-architecture/index
-architecture
-providers/index
-api-reference/index
-api-reference/gateway
-api-reference/adapter
-api-reference/events
-api-reference/channel-router
-api-reference/call-stacks
-events/index
-configuration
-troubleshooting
-contributing
-```
+   getting-started/index
+   getting-started/installation
+   getting-started/first-steps
+   architecture
+   providers/index
+   api-reference/index
+   api-reference/gateway
+   api-reference/adapter
+   api-reference/events
+   api-reference/channel-router
+   api-reference/call-stacks
+   events/index
+   configuration
+   troubleshooting
+   contributing
 
-## Languages / 语言
+Languages / 语言
 
-- [English](index) — current language
-- [中文](zh/index) — Chinese translation
+- `English <index>`_ — current language
+- `中文 <zh/index>`_ — Chinese translation
 
-## Quick Example
+Quick Example
+-------------
 
-```python
-import asyncio
-from unified_icc import UnifiedICC
+.. code-block:: python
 
-async def main():
-    # Create gateway
-    gateway = UnifiedICC()
-    await gateway.start()
+   import asyncio
+   from unified_icc import UnifiedICC
 
-    # Create a new Claude Code window
-    window = await gateway.create_window("/path/to/project")
+   async def main():
+       # Create gateway
+       gateway = UnifiedICC()
+       await gateway.start()
 
-    # Bind a messaging channel to the window
-    gateway.bind_channel("feishu:chat_123:thread_456", window.window_id)
+       # Create a new Claude Code window
+       window = await gateway.create_window("/path/to/project")
 
-    # Subscribe to agent messages
-    def on_message(event):
-        print(f"Agent: {event.messages[-1].text}")
+       # Bind a messaging channel to the window
+       gateway.bind_channel("feishu:chat_123:thread_456", window.window_id)
 
-    gateway.on_message(on_message)
+       # Subscribe to agent messages
+       def on_message(event):
+           print(f"Agent: {event.messages[-1].text}")
 
-    # Send input to the agent
-    await gateway.send_to_window(window.window_id, "Hello, help me with this project")
+       gateway.on_message(on_message)
 
-    await gateway.stop()
+       # Send input to the agent
+       await gateway.send_to_window(window.window_id, "Hello, help me with this project")
 
-asyncio.run(main())
-```
+       await gateway.stop()
 
-## Related Projects
+   asyncio.run(main())
 
-| Project | Description |
-|---------|-------------|
-| [cclark](https://github.com/Agony5757/cclark) | Feishu frontend consuming unified-icc |
-| [ccgram](https://github.com/alexei-led/ccgram) | Original Telegram frontend (upstream reference) |
+Related Projects
+----------------
 
-## Indices and Tables
+.. list-table::
+   :header-rows: 1
+
+   * - Project
+     - Description
+   * - `cclark <https://github.com/Agony5757/cclark>`_
+     - Feishu frontend consuming unified-icc
+   * - `ccgram <https://github.com/alexei-led/ccgram>`_
+     - Original Telegram frontend (upstream reference)
+
+Indices and Tables
+-----------------
 
 * {ref}`genindex`
 * {ref}`modindex`
