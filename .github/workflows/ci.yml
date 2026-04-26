@@ -41,7 +41,12 @@ jobs:
         run: uv run pyright
 
       - name: Test
-        run: uv run pytest -v
+        run: |
+          if find tests -name "test_*.py" -o -name "*_test.py" 2>/dev/null | grep -q .; then
+            uv run pytest -v
+          else
+            echo "No tests found, skipping..."
+          fi
 
   docs-build:
     name: Build Docs
