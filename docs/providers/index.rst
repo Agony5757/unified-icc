@@ -1,348 +1,413 @@
-# Providers
+Provider
+=========
 
-Unified ICC supports multiple AI coding agent providers through a unified abstraction.
+Unified ICC 通过统一抽象支持多种 AI 编程助手 Provider。
 
-## Supported Providers
+支持的 Provider
+---------------
 
-| Provider | Package | Launch Command |
-|----------|---------|----------------|
-| Claude | `claude-code` | `claude` |
-| Codex | `codex` | `codex` |
-| Gemini | `gemini` | `gemini` |
-| Pi | `pi` | `pi` |
-| Shell | — | interactive shell |
+.. list-table::
+   :header-rows: 1
 
-## Provider Architecture
+   * - Provider
+     - 包
+     - 启动命令
+   * - Claude
+     - ``claude-code``
+     - ``claude``
+   * - Codex
+     - ``codex``
+     - ``codex``
+   * - Gemini
+     - ``gemini``
+     - ``gemini``
+   * - Pi
+     - ``pi``
+     - ``pi``
+   * - Shell
+     - —
+     - 交互式 shell
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      ProviderRegistry                        │
-│  - get(provider_name) → AgentProvider                       │
-│  - is_valid(provider_name) → bool                           │
-│  - provider_names() → list[str]                             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   AgentProvider Protocol                     │
-│  (all providers implement this interface)                   │
-│                                                              │
-│  @property capabilities → ProviderCapabilities               │
-│  make_launch_args() → str                                    │
-│  parse_hook_payload() → SessionStartEvent | None            │
-│  parse_transcript_line() → dict | None                      │
-│  read_transcript_file() → (entries, offset)                  │
-│  parse_transcript_entries() → (messages, pending_tools)      │
-│  parse_terminal_status() → StatusUpdate | None              │
-│  extract_bash_output() → str | None                         │
-│  discover_transcript() → SessionStartEvent | None           │
-│  ...                                                         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│ ClaudeProvider│      │ CodexProvider│      │ GeminiProvider│
-│             │      │             │      │             │
-│ JSONL       │      │ Plain text  │      │ JSONL       │
-│ Session hooks│     │ No hooks    │      │ No hooks    │
-└─────────────┘      └─────────────┘      └─────────────┘
-```
+Provider 架构
+--------------
 
-## AgentProvider Protocol
+::
 
-```python
-class AgentProvider(Protocol):
-    @property
-    def capabilities(self) -> ProviderCapabilities:
-        """What features this provider supports."""
-        ...
+   ┌─────────────────────────────────────────────────────────────┐
+   │                      ProviderRegistry                        │
+   │  - get(provider_name) → AgentProvider                       │
+   │  - is_valid(provider_name) → bool                            │
+   │  - provider_names() → list[str]                             │
+   └─────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │                   AgentProvider Protocol                      │
+   │  （所有 Provider 都实现此接口）                               │
+   │                                                              │
+   │  @property capabilities → ProviderCapabilities                 │
+   │  make_launch_args() → str                                   │
+   │  parse_hook_payload() → SessionStartEvent | None             │
+   │  parse_transcript_line() → dict | None                       │
+   │  read_transcript_file() → (entries, offset)                 │
+   │  parse_transcript_entries() → (messages, pending_tools)      │
+   │  parse_terminal_status() → StatusUpdate | None             │
+   │  extract_bash_output() → str | None                          │
+   │  discover_transcript() → SessionStartEvent | None            │
+   │  ...                                                         │
+   └─────────────────────────────────────────────────────────────┘
+                                 │
+              ┌─────────────────┼─────────────────┐
+              ▼                  ▼                  ▼
+   ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+   │ClaudeProvider│      │CodexProvider│      │GeminiProvider│
+   │             │      │             │      │             │
+   │ JSONL       │      │ 纯文本     │      │ JSONL       │
+   │ 会话钩子    │      │ 无钩子     │      │ 无钩子      │
+   └─────────────┘      └─────────────┘      └─────────────┘
 
-    def make_launch_args(
-        self,
-        resume_id: str | None = None,
-        use_continue: bool = False,
-    ) -> str:
-        """Build launch command arguments."""
-        ...
+AgentProvider 协议
+------------------
 
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
-        """Parse SessionStart hook payload."""
-        ...
+.. code-block:: python
 
-    def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
-        """Parse a single transcript line."""
-        ...
+   class AgentProvider(Protocol):
+       @property
+       def capabilities(self) -> ProviderCapabilities:
+           """此 Provider 支持哪些功能。"""
+           ...
 
-    def read_transcript_file(
-        self,
-        file_path: str,
-        last_offset: int,
-    ) -> tuple[list[dict[str, Any]], int]:
-        """Read new entries from transcript file."""
-        ...
+       def make_launch_args(
+           self,
+           resume_id: str | None = None,
+           use_continue: bool = False,
+       ) -> str:
+           """构建启动命令参数。"""
+           ...
 
-    def parse_transcript_entries(
-        self,
-        entries: list[dict[str, Any]],
-        pending_tools: dict[str, Any],
-        cwd: str | None = None,
-    ) -> tuple[list[AgentMessage], dict[str, Any]]:
-        """Convert parsed entries to AgentMessage objects."""
-        ...
+       def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
+           """解析 SessionStart 钩子载荷。"""
+           ...
 
-    def parse_terminal_status(
-        self,
-        pane_text: str,
-        *,
-        pane_title: str = "",
-    ) -> StatusUpdate | None:
-        """Parse status from terminal pane."""
-        ...
+       def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
+           """解析单行转录内容。"""
+           ...
 
-    def extract_bash_output(
-        self,
-        pane_text: str,
-        command: str,
-    ) -> str | None:
-        """Extract bash command output from pane."""
-        ...
+       def read_transcript_file(
+           self,
+           file_path: str,
+           last_offset: int,
+       ) -> tuple[list[dict[str, Any]], int]:
+           """从转录文件读取新条目。"""
+           ...
 
-    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
-        """Check if entry is from user."""
-        ...
+       def parse_transcript_entries(
+           self,
+           entries: list[dict[str, Any]],
+           pending_tools: dict[str, Any],
+           cwd: str | None = None,
+       ) -> tuple[list[AgentMessage], dict[str, Any]]:
+           """将解析的条目转换为 AgentMessage 对象。"""
+           ...
 
-    def discover_transcript(
-        self,
-        cwd: str,
-        window_key: str,
-        *,
-        max_age: float | None = None,
-    ) -> SessionStartEvent | None:
-        """Find transcript for cwd."""
-        ...
+       def parse_terminal_status(
+           self,
+           pane_text: str,
+           *,
+           pane_title: str = "",
+       ) -> StatusUpdate | None:
+           """从终端窗格解析状态。"""
+           ...
 
-    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
-        """Discover available commands/skills."""
-        ...
+       def extract_bash_output(
+           self,
+           pane_text: str,
+           command: str,
+       ) -> str | None:
+           """从窗格中提取 bash 命令输出。"""
+           ...
 
-    def build_status_snapshot(
-        self,
-        transcript_path: str,
-        *,
-        display_name: str,
-        session_id: str = "",
-        cwd: str = "",
-    ) -> str | None:
-        """Build status line for snapshot."""
-        ...
-```
+       def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
+           """检查条目是否来自用户。"""
+           ...
 
-## ProviderCapabilities
+       def discover_transcript(
+           self,
+           cwd: str,
+           window_key: str,
+           *,
+           max_age: float | None = None,
+       ) -> SessionStartEvent | None:
+           """为工作目录查找转录。"""
+           ...
 
-Each provider declares its capabilities:
+       def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
+           """发现可用的命令/技能。"""
+           ...
 
-```python
-@dataclass(frozen=True, slots=True)
-class ProviderCapabilities:
-    name: str                           # Provider name
-    launch_command: str                 # CLI launch command
-    supports_hook: bool = False         # Has hook integration
-    supports_hook_events: bool = False   # Has hook event types
-    hook_event_types: tuple[str, ...] = ()  # Available hook types
-    supports_resume: bool = False       # Can resume sessions
-    supports_continue: bool = False     # Has /continue command
-    supports_structured_transcript: bool = False  # JSONL vs plain
-    supports_incremental_read: bool = True  # Can read incrementally
-    transcript_format: str = "jsonl"     # "jsonl" or "plain"
-    uses_pane_title: bool = False        # Uses terminal title
-    builtin_commands: tuple[str, ...] = ()   # Built-in commands
-    supports_user_command_discovery: bool = False  # Can discover skills
-    supports_status_snapshot: bool = False  # Can build status snapshot
-    supports_mailbox_delivery: bool = True  # Mailbox support
-    chat_first_command_path: bool = False  # /command path format
-    has_yolo_confirmation: bool = False  # Has --dangerously-skip flag
-    supports_task_tracking: bool = False  # Task tracking support
-```
+       def build_status_snapshot(
+           self,
+           transcript_path: str,
+           *,
+           display_name: str,
+           session_id: str = "",
+           cwd: str = "",
+       ) -> str | None:
+           """为快照构建状态行。"""
+           ...
 
-## Provider Comparison
+ProviderCapabilities
+-------------------
 
-| Feature | Claude | Codex | Gemini | Pi |
-|---------|--------|-------|--------|-----|
-| Hook events | ✅ | ❌ | ❌ | ❌ |
-| JSONL transcript | ✅ | ❌ | ✅ | ✅ |
-| Resume sessions | ✅ | ❌ | ❌ | ❌ |
-| /continue | ✅ | ❌ | ❌ | ❌ |
-| Status snapshot | ✅ | ❌ | ❌ | ❌ |
-| Yolo mode | ✅ `--dangerously-skip-permissions` | ✅ `--dangerously-bypass` | ✅ `--yolo` | ❌ |
-| Task tracking | ✅ | ❌ | ❌ | ❌ |
-| Command discovery | ✅ | ❌ | ❌ | ❌ |
+每个 Provider 声明其能力：
 
-## Using Providers
+.. code-block:: python
 
-### Get Provider by Name
+   @dataclass(frozen=True, slots=True)
+   class ProviderCapabilities:
+       name: str                           # Provider 名称
+       launch_command: str                 # CLI 启动命令
+       supports_hook: bool = False         # 有钩子集成
+       supports_hook_events: bool = False   # 有钩子事件类型
+       hook_event_types: tuple[str, ...] = ()  # 可用钩子类型
+       supports_resume: bool = False        # 可恢复会话
+       supports_continue: bool = False     # 有 /continue 命令
+       supports_structured_transcript: bool = False  # JSONL vs 纯文本
+       supports_incremental_read: bool = True  # 可增量读取
+       transcript_format: str = "jsonl"     # "jsonl" 或 "plain"
+       uses_pane_title: bool = False        # 使用终端标题
+       builtin_commands: tuple[str, ...] = ()   # 内置命令
+       supports_user_command_discovery: bool = False  # 可发现技能
+       supports_status_snapshot: bool = False  # 可构建状态快照
+       supports_mailbox_delivery: bool = True  # 邮箱支持
+       chat_first_command_path: bool = False  # /command 路径格式
+       has_yolo_confirmation: bool = False  # 有 --dangerously-skip 标志
+       supports_task_tracking: bool = False  # 任务追踪支持
 
-```python
-from unified_icc.providers import get_provider, registry
+Provider 功能对比
+------------------
 
-# Get default provider (from config)
-provider = get_provider()
-print(provider.capabilities.name)  # "claude"
+.. list-table::
+   :header-rows: 1
 
-# Get specific provider
-claude = registry.get("claude")
-codex = registry.get("codex")
-```
+   * - 功能
+     - Claude
+     - Codex
+     - Gemini
+     - Pi
+   * - 钩子事件
+     - ✅
+     - ❌
+     - ❌
+     - ❌
+   * - JSONL 转录
+     - ✅
+     - ❌
+     - ✅
+     - ✅
+   * - 恢复会话
+     - ✅
+     - ❌
+     - ❌
+     - ❌
+   * - /continue
+     - ✅
+     - ❌
+     - ❌
+     - ❌
+   * - 状态快照
+     - ✅
+     - ❌
+     - ❌
+     - ❌
+   * - Yolo 模式
+     - ✅ ``--dangerously-skip-permissions``
+     - ✅ ``--dangerously-bypass``
+     - ✅ ``--yolo``
+     - ❌
+   * - 任务追踪
+     - ✅
+     - ❌
+     - ❌
+     - ❌
+   * - 命令发现
+     - ✅
+     - ❌
+     - ❌
+     - ❌
 
-### Check Provider Validity
+使用 Provider
+-------------
 
-```python
-from unified_icc.providers import registry
+按名称获取 Provider
+~~~~~~~~~~~~~~~~~~
 
-if registry.is_valid("claude"):
-    provider = registry.get("claude")
-```
+.. code-block:: python
 
-### List Available Providers
+   from unified_icc.providers import get_provider, registry
 
-```python
-from unified_icc.providers import registry
+   # 获取默认 Provider（来自配置）
+   provider = get_provider()
+   print(provider.capabilities.name)  # "claude"
 
-for name in registry.provider_names():
-    caps = registry.get(name).capabilities
-    print(f"{name}: {caps.launch_command}")
-```
+   # 获取特定 Provider
+   claude = registry.get("claude")
+   codex = registry.get("codex")
 
-### Resolve Launch Command
+检查 Provider 有效性
+~~~~~~~~~~~~~~~~~~~~
 
-```python
-from unified_icc.providers import resolve_launch_command
+.. code-block:: python
 
-# Normal mode
-cmd = resolve_launch_command("claude")
-# "claude"
+   from unified_icc.providers import registry
 
-# Yolo mode (skip permissions)
-cmd = resolve_launch_command("claude", approval_mode="yolo")
-# "claude --dangerously-skip-permissions"
-```
+   if registry.is_valid("claude"):
+       provider = registry.get("claude")
 
-### Detect Provider
+列出可用 Provider
+~~~~~~~~~~~~~~~~
 
-```python
-from unified_icc.providers import (
-    detect_provider_from_command,
-    detect_provider_from_transcript_path,
-    detect_provider_from_runtime,
-)
+.. code-block:: python
 
-# From running command
-provider = detect_provider_from_command("/usr/local/bin/claude")
-# "claude"
+   from unified_icc.providers import registry
 
-# From transcript path
-provider = detect_provider_from_transcript_path("/home/user/.claude/projects/myproj/.claude/history/2025-01-15_123456.jsonl")
-# "claude"
+   for name in registry.provider_names():
+       caps = registry.get(name).capabilities
+       print(f"{name}: {caps.launch_command}")
 
-# From pane command and title
-provider = detect_provider_from_runtime(
-    pane_current_command="claude",
-    pane_title="icc:claude",
-)
-# "claude"
-```
+解析启动命令
+~~~~~~~~~~~~
 
-## Implementing a Custom Provider
+.. code-block:: python
 
-```python
-from dataclasses import dataclass
-from typing import Any
-from unified_icc.providers.base import (
-    AgentProvider,
-    AgentMessage,
-    ProviderCapabilities,
-    SessionStartEvent,
-    StatusUpdate,
-    DiscoveredCommand,
-)
+   from unified_icc.providers import resolve_launch_command
 
-class MyAgentProvider:
-    @property
-    def capabilities(self) -> ProviderCapabilities:
-        return ProviderCapabilities(
-            name="myagent",
-            launch_command="myagent",
-            supports_hook=False,
-            transcript_format="jsonl",
-        )
+   # 普通模式
+   cmd = resolve_launch_command("claude")
+   # "claude"
 
-    def make_launch_args(
-        self,
-        resume_id: str | None = None,
-        use_continue: bool = False,
-    ) -> str:
-        if resume_id:
-            return f"--resume {resume_id}"
-        return ""
+   # Yolo 模式（跳过权限）
+   cmd = resolve_launch_command("claude", approval_mode="yolo")
+   # "claude --dangerously-skip-permissions"
 
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
-        return None  # No hook support
+检测 Provider
+~~~~~~~~~~~~
 
-    def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
-        import json
-        try:
-            return json.loads(line)
-        except json.JSONDecodeError:
-            return None
+.. code-block:: python
 
-    def parse_transcript_entries(
-        self,
-        entries: list[dict[str, Any]],
-        pending_tools: dict[str, Any],
-        cwd: str | None = None,
-    ) -> tuple[list[AgentMessage], dict[str, Any]]:
-        messages = []
-        for entry in entries:
-            messages.append(AgentMessage(
-                text=entry.get("text", ""),
-                role=entry.get("role", "assistant"),
-                content_type=entry.get("type", "text"),
-            ))
-        return messages, {}
+   from unified_icc.providers import (
+       detect_provider_from_command,
+       detect_provider_from_transcript_path,
+       detect_provider_from_runtime,
+   )
 
-    def parse_terminal_status(
-        self,
-        pane_text: str,
-        *,
-        pane_title: str = "",
-    ) -> StatusUpdate | None:
-        return None
+   # 从运行命令检测
+   provider = detect_provider_from_command("/usr/local/bin/claude")
+   # "claude"
 
-    def extract_bash_output(self, pane_text: str, command: str) -> str | None:
-        return None
+   # 从转录路径检测
+   provider = detect_provider_from_transcript_path("/home/user/.claude/projects/myproj/.claude/history/2025-01-15_123456.jsonl")
+   # "claude"
 
-    def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
-        return entry.get("role") == "user"
+   # 从窗格命令和标题检测
+   provider = detect_provider_from_runtime(
+       pane_current_command="claude",
+       pane_title="icc:claude",
+   )
+   # "claude"
 
-    def discover_transcript(
-        self,
-        cwd: str,
-        window_key: str,
-        *,
-        max_age: float | None = None,
-    ) -> SessionStartEvent | None:
-        return None
+实现自定义 Provider
+--------------------
 
-    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
-        return []
+.. code-block:: python
 
-    def build_status_snapshot(
-        self,
-        transcript_path: str,
-        *,
-        display_name: str,
-        session_id: str = "",
-        cwd: str = "",
-    ) -> str | None:
-        return None
-```
+   from dataclasses import dataclass
+   from typing import Any
+   from unified_icc.providers.base import (
+       AgentProvider,
+       AgentMessage,
+       ProviderCapabilities,
+       SessionStartEvent,
+       StatusUpdate,
+       DiscoveredCommand,
+   )
+
+   class MyAgentProvider:
+       @property
+       def capabilities(self) -> ProviderCapabilities:
+           return ProviderCapabilities(
+               name="myagent",
+               launch_command="myagent",
+               supports_hook=False,
+               transcript_format="jsonl",
+           )
+
+       def make_launch_args(
+           self,
+           resume_id: str | None = None,
+           use_continue: bool = False,
+       ) -> str:
+           if resume_id:
+               return f"--resume {resume_id}"
+           return ""
+
+       def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
+           return None  # 无钩子支持
+
+       def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
+           import json
+           try:
+               return json.loads(line)
+           except json.JSONDecodeError:
+               return None
+
+       def parse_transcript_entries(
+           self,
+           entries: list[dict[str, Any]],
+           pending_tools: dict[str, Any],
+           cwd: str | None = None,
+       ) -> tuple[list[AgentMessage], dict[str, Any]]:
+           messages = []
+           for entry in entries:
+               messages.append(AgentMessage(
+                   text=entry.get("text", ""),
+                   role=entry.get("role", "assistant"),
+                   content_type=entry.get("type", "text"),
+               ))
+           return messages, {}
+
+       def parse_terminal_status(
+           self,
+           pane_text: str,
+           *,
+           pane_title: str = "",
+       ) -> StatusUpdate | None:
+           return None
+
+       def extract_bash_output(self, pane_text: str, command: str) -> str | None:
+           return None
+
+       def is_user_transcript_entry(self, entry: dict[str, Any]) -> bool:
+           return entry.get("role") == "user"
+
+       def discover_transcript(
+           self,
+           cwd: str,
+           window_key: str,
+           *,
+           max_age: float | None = None,
+       ) -> SessionStartEvent | None:
+           return None
+
+       def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
+           return []
+
+       def build_status_snapshot(
+           self,
+           transcript_path: str,
+           *,
+           display_name: str,
+           session_id: str = "",
+           cwd: str = "",
+       ) -> str | None:
+           return None

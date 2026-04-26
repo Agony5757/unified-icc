@@ -1,186 +1,193 @@
-# First Steps
+第一步
+=========
 
-This guide walks you through building a simple messaging frontend adapter.
+本指南将引导你构建一个简单的消息前端适配器。
 
-## Building a Custom Frontend Adapter
+构建自定义前端适配器
+--------------------
 
-### Step 1: Implement the FrontendAdapter Protocol
+第一步：实现 FrontendAdapter 协议
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-```python
-from unified_icc import FrontendAdapter, CardPayload, InteractivePrompt
-from typing import TYPE_CHECKING
+.. code-block:: python
 
-if TYPE_CHECKING:
-    from your_messaging_sdk import MessagingClient
+   from unified_icc import FrontendAdapter, CardPayload, InteractivePrompt
+   from typing import TYPE_CHECKING
 
-class MyPlatformAdapter(FrontendAdapter):
-    def __init__(self, client: "MessagingClient"):
-        self.client = client
+   if TYPE_CHECKING:
+       from your_messaging_sdk import MessagingClient
 
-    async def send_text(self, channel_id: str, text: str) -> str:
-        return await self.client.send_message(channel_id, text)
+   class MyPlatformAdapter(FrontendAdapter):
+       def __init__(self, client: "MessagingClient"):
+           self.client = client
 
-    async def send_card(self, channel_id: str, card: CardPayload) -> str:
-        formatted = self._format_card(card)
-        return await self.client.send_card(channel_id, formatted)
+       async def send_text(self, channel_id: str, text: str) -> str:
+           return await self.client.send_message(channel_id, text)
 
-    async def update_card(self, channel_id: str, card_id: str, card: CardPayload) -> None:
-        formatted = self._format_card(card)
-        await self.client.update_message(channel_id, card_id, formatted)
+       async def send_card(self, channel_id: str, card: CardPayload) -> str:
+           formatted = self._format_card(card)
+           return await self.client.send_card(channel_id, formatted)
 
-    async def send_image(self, channel_id: str, image_bytes: bytes, caption: str = "") -> str:
-        return await self.client.upload_image(channel_id, image_bytes, caption)
+       async def update_card(self, channel_id: str, card_id: str, card: CardPayload) -> None:
+           formatted = self._format_card(card)
+           await self.client.update_message(channel_id, card_id, formatted)
 
-    async def send_file(self, channel_id: str, file_path: str, caption: str = "") -> str:
-        return await self.client.upload_file(channel_id, file_path, caption)
+       async def send_image(self, channel_id: str, image_bytes: bytes, caption: str = "") -> str:
+           return await self.client.upload_image(channel_id, image_bytes, caption)
 
-    async def show_prompt(self, channel_id: str, prompt: InteractivePrompt) -> str:
-        buttons = [opt["text"] for opt in prompt.options]
-        return await self.client.send_buttons(channel_id, prompt.title, buttons)
+       async def send_file(self, channel_id: str, file_path: str, caption: str = "") -> str:
+           return await self.client.upload_file(channel_id, file_path, caption)
 
-    def _format_card(self, card: CardPayload) -> dict:
-        # Convert CardPayload to your platform's card format
-        return {
-            "title": card.title,
-            "body": card.body,
-            "fields": card.fields,
-            "actions": card.actions,
-            "color": card.color,
-        }
-```
+       async def show_prompt(self, channel_id: str, prompt: InteractivePrompt) -> str:
+           buttons = [opt["text"] for opt in prompt.options]
+           return await self.client.send_buttons(channel_id, prompt.title, buttons)
 
-### Step 2: Wire Up the Event Handlers
+       def _format_card(self, card: CardPayload) -> dict:
+           # 将 CardPayload 转换为平台特定的卡片格式
+           return {
+               "title": card.title,
+               "body": card.body,
+               "fields": card.fields,
+               "actions": card.actions,
+               "color": card.color,
+           }
 
-```python
-import asyncio
-from unified_icc import UnifiedICC
+第二步：连接事件处理器
+~~~~~~~~~~~~~~~~~~~~~~
 
-async def main():
-    gateway = UnifiedICC()
-    await gateway.start()
+.. code-block:: python
 
-    adapter = MyPlatformAdapter(messaging_client)
+   import asyncio
+   from unified_icc import UnifiedICC
 
-    # Route agent messages to the frontend
-    def on_agent_message(event):
-        # event.messages contains parsed AgentMessage objects
-        for msg in event.messages:
-            if msg.role == "assistant":
-                # Send as a card for rich formatting
-                card = CardPayload(
-                    title="Claude",
-                    body=msg.text,
-                    color="#007AFF"
-                )
-                for channel_id in event.channel_ids:
-                    asyncio.create_task(adapter.send_card(channel_id, card))
+   async def main():
+       gateway = UnifiedICC()
+       await gateway.start()
 
-    gateway.on_message(on_agent_message)
+       adapter = MyPlatformAdapter(messaging_client)
 
-    # Route status changes
-    def on_status_change(event):
-        status_text = f"Status: {event.status}"
-        for channel_id in event.channel_ids:
-            asyncio.create_task(adapter.send_text(channel_id, status_text))
+       # 将助手消息路由到前端
+       def on_agent_message(event):
+           # event.messages 包含解析后的 AgentMessage 对象
+           for msg in event.messages:
+               if msg.role == "assistant":
+                   # 发送为卡片以获得富文本格式
+                   card = CardPayload(
+                       title="Claude",
+                       body=msg.text,
+                       color="#007AFF"
+                   )
+                   for channel_id in event.channel_ids:
+                       asyncio.create_task(adapter.send_card(channel_id, card))
 
-    gateway.on_status(on_status_change)
+       gateway.on_message(on_agent_message)
 
-    # Route window events
-    def on_window_event(event):
-        text = f"New window: {event.display_name}"
-        # Broadcast to all bound channels or specific ones
-        asyncio.create_task(adapter.send_text("admin_channel", text))
+       # 路由状态变更
+       def on_status_change(event):
+           status_text = f"状态：{event.status}"
+           for channel_id in event.channel_ids:
+               asyncio.create_task(adapter.send_text(channel_id, status_text))
 
-    gateway.on_window_change(on_window_event)
+       gateway.on_status(on_status_change)
 
-    # Keep running
-    await asyncio.Event().wait()
+       # 路由窗口事件
+       def on_window_event(event):
+           text = f"新窗口：{event.display_name}"
+           asyncio.create_task(adapter.send_text("admin_channel", text))
 
-asyncio.run(main())
-```
+       gateway.on_window_change(on_window_event)
 
-### Step 3: Handle Incoming Messages
+       # 保持运行
+       await asyncio.Event().wait()
 
-```python
-async def handle_incoming_message(channel_id: str, text: str):
-    # Resolve the window for this channel
-    window_id = gateway.resolve_window(channel_id)
-    if not window_id:
-        await adapter.send_text(channel_id, "No active session for this channel")
-        return
+   asyncio.run(main())
 
-    # Send to the agent
-    await gateway.send_to_window(window_id, text)
+第三步：处理收到的消息
+~~~~~~~~~~~~~~~~~~~~~~
 
-# In your webhook handler:
-async def webhook_handler(request):
-    payload = await request.json()
-    channel_id = payload["channel_id"]
-    text = payload["text"]
-    await handle_incoming_message(channel_id, text)
-    return {"status": "ok"}
-```
+.. code-block:: python
 
-### Step 4: Run Your Application
+   async def handle_incoming_message(channel_id: str, text: str):
+       # 解析该频道对应的窗口
+       window_id = gateway.resolve_window(channel_id)
+       if not window_id:
+           await adapter.send_text(channel_id, "该频道没有活跃会话")
+           return
 
-```python
-# Run both the gateway and your web server
-async def run():
-    gateway = UnifiedICC()
-    await gateway.start()
+       # 发送给助手
+       await gateway.send_to_window(window_id, text)
 
-    # Start your web server in the background
-    server = MyWebServer(webhook_handler)
-    await server.start()
+   # 在你的 webhook 处理器中：
+   async def webhook_handler(request):
+       payload = await request.json()
+       channel_id = payload["channel_id"]
+       text = payload["text"]
+       await handle_incoming_message(channel_id, text)
+       return {"status": "ok"}
 
-    try:
-        await asyncio.Event().wait()
-    finally:
-        await gateway.stop()
+第四步：运行你的应用
+~~~~~~~~~~~~~~~~~~~~
 
-asyncio.run(run())
-```
+.. code-block:: python
 
-## Complete Example: Simple CLI Frontend
+   # 同时运行网关和你的 Web 服务器
+   async def run():
+       gateway = UnifiedICC()
+       await gateway.start()
 
-```python
-"""Simple CLI frontend that reads from stdin and writes to stdout."""
-import asyncio
-import sys
-from unified_icc import UnifiedICC, CardPayload
+       # 在后台启动你的 Web 服务器
+       server = MyWebServer(webhook_handler)
+       await server.start()
 
-async def cli_frontend():
-    gateway = UnifiedICC()
-    await gateway.start()
+       try:
+           await asyncio.Event().wait()
+       finally:
+           await gateway.stop()
 
-    # Create a window for the CLI interaction
-    window = await gateway.create_window("/tmp", provider="claude")
-    gateway.bind_channel("cli:stdin", window.window_id)
+   asyncio.run(run())
 
-    def on_message(event):
-        for msg in event.messages:
-            if msg.text:
-                print(f"\n[Agent] {msg.text}\n> ", end="", flush=True)
+完整示例：简单的 CLI 前端
+-------------------------
 
-    gateway.on_message(on_message)
+.. code-block:: python
 
-    # Read from stdin
-    async def read_stdin():
-        loop = asyncio.get_event_loop()
-        while True:
-            line = await loop.run_in_executor(None, sys.stdin.readline)
-            if not line:
-                break
-            await gateway.send_to_window(window.window_id, line.rstrip())
+   """简单的 CLI 前端，从 stdin 读取并写入 stdout。"""
+   import asyncio
+   import sys
+   from unified_icc import UnifiedICC, CardPayload
 
-    await asyncio.gather(read_stdin())
+   async def cli_frontend():
+       gateway = UnifiedICC()
+       await gateway.start()
 
-if __name__ == "__main__":
-    asyncio.run(cli_frontend())
-```
+       # 创建一个用于 CLI 交互的窗口
+       window = await gateway.create_window("/tmp", provider="claude")
+       gateway.bind_channel("cli:stdin", window.window_id)
 
-## Next Steps
+       def on_message(event):
+           for msg in event.messages:
+               if msg.text:
+                   print(f"\n[助手] {msg.text}\n> ", end="", flush=True)
 
-- Review the [API Reference](../api-reference/index.rst) for all available methods
-- See the [Providers](../providers/index.rst) documentation for provider-specific details
-- Check [Configuration](../configuration.rst) for environment variables
+       gateway.on_message(on_message)
+
+       # 从 stdin 读取
+       async def read_stdin():
+           loop = asyncio.get_event_loop()
+           while True:
+               line = await loop.run_in_executor(None, sys.stdin.readline)
+               if not line:
+                   break
+               await gateway.send_to_window(window.window_id, line.rstrip())
+
+       await asyncio.gather(read_stdin())
+
+   if __name__ == "__main__":
+       asyncio.run(cli_frontend())
+
+下一步
+------
+
+- 查阅 `API 参考 <../api-reference/index.rst>`_ 了解所有可用方法
+- 参见 `Provider <../providers/index.rst>`_ 文档了解 Provider 特定细节
+- 查看 `配置 <../configuration.rst>`_ 了解环境变量

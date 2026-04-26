@@ -1,12 +1,14 @@
-函数调用栈
+:orphan:
+
+Call Stacks
 ===========
 
-本文档追踪 unified-icc 关键操作的函数调用链。
+This document traces the function call chains for key operations in unified-icc.
 
-窗口创建
---------
+Window Creation
+---------------
 
-创建新的 AI 助手窗口涉及多个子系统：
+Creating a new agent window involves multiple subsystems:
 
 .. code-block:: text
 
@@ -35,16 +37,16 @@
    |
    └── return WindowInfo(...)
 
-**关键文件：**
+**Key files:**
 
 * ``gateway.py:113-133`` — create_window
-* ``tmux_manager.py:200-350`` — create_window 内部
-* ``session_map.py`` — session map 更新
+* ``tmux_manager.py:200-350`` — create_window internals
+* ``session_map.py`` — session map updates
 
-消息路由
---------
+Message Routing
+---------------
 
-将前端收到的消息路由到助手：
+Routing an incoming message from frontend to agent:
 
 .. code-block:: text
 
@@ -57,18 +59,18 @@
    |   └── tmux_manager.send_to_window(window_id, text)
    |       └── Pane.send_keys(text + "\n")
    |
-   └── Frontend 通过适配器发送响应
+   └── Frontend sends response via adapter
 
-**关键文件：**
+**Key files:**
 
 * ``channel_router.py:202-204`` — resolve_window
 * ``gateway.py:158-160`` — send_to_window
 * ``tmux_manager.py:400-450`` — send_to_window
 
-输出捕获与触发
---------------
+Output Capture and Emission
+---------------------------
 
-检测、解析 AI 助手输出并触发事件：
+Agent output is detected, parsed, and emitted as events:
 
 .. code-block:: text
 
@@ -107,17 +109,17 @@
            ├── AgentMessageEvent(window_id, session_id, messages, channel_ids)
            └── user callbacks invoked
 
-**关键文件：**
+**Key files:**
 
 * ``session_monitor.py:305-386`` — _monitor_loop
 * ``session_monitor.py:143-196`` — check_for_updates
 * ``transcript_reader.py`` — TranscriptReader
-* ``providers/*/parse_transcript_entries()`` — provider 解析
+* ``providers/*/parse_transcript_entries()`` — provider parsing
 
-频道绑定
---------
+Channel Binding
+---------------
 
-将消息频道绑定到窗口：
+Binding a messaging channel to a window:
 
 .. code-block:: text
 
@@ -136,13 +138,13 @@
    |
    └── StatePersistence.save() after 0.5s debounce
 
-**关键文件：**
+**Key files:**
 
 * ``channel_router.py:100-164`` — bind
 * ``state_persistence.py`` — debounced writes
 
-事件订阅与触发
---------------
+Event Subscription and Emission
+-------------------------------
 
 .. code-block:: text
 
@@ -152,7 +154,7 @@
 
    ...
 
-   检测到 AI 助手输出
+   Agent output detected
    |
    └── SessionMonitor._monitor_loop()
        |
@@ -172,15 +174,15 @@
                                |
                                └── user_handler(event)
 
-**关键文件：**
+**Key files:**
 
-* ``gateway.py:178-179`` — on_message 注册
-* ``gateway.py:213-234`` — _on_new_message 分发
+* ``gateway.py:178-179`` — on_message registration
+* ``gateway.py:213-234`` — _on_new_message dispatch
 
-状态持久化
-----------
+State Persistence
+-----------------
 
-变更后保存状态：
+Saving state after a change:
 
 .. code-block:: text
 
@@ -200,28 +202,28 @@
    |
    └── clear dirty flag
 
-**关键文件：**
+**Key files:**
 
-* ``state_persistence.py`` — 完整实现
-* ``utils.py:atomic_write_json()`` — 原子写入辅助函数
+* ``state_persistence.py`` — full implementation
+* ``utils.py:atomic_write_json()`` — atomic write helper
 
-钩子事件处理
------------
+Hook Event Handling
+-------------------
 
-Claude 钩子事件从钩子模块流向用户回调：
+Claude hook events flow from the hook module to user callbacks:
 
 .. code-block:: text
 
-   hook.py（在随 Claude 一起运行的 tmux 窗格中）
+   hook.py (runs inside tmux pane alongside Claude)
    |
-   ├── Claude 发出钩子事件
+   ├── Claude emits hook event
    |
-   ├── hook.handle_hook() 从 stdin 读取
+   ├── hook.handle_hook() reads from stdin
    |
    ├── hook.write_to_event_log()
-   |   └── 追加到 events.jsonl
+   |   └── append to events.jsonl
    |
-   └── [单独监控网关进程]
+   └── [separate gateway process monitoring]
 
    SessionMonitor._read_hook_events()
    |
@@ -243,14 +245,14 @@ Claude 钩子事件从钩子模块流向用户回调：
                    |
                    └── cb(hook_evt)
 
-**关键文件：**
+**Key files:**
 
-* ``hook.py`` — 钩子实现（在 tmux 窗格中运行）
-* ``event_reader.py`` — events.jsonl 读取
-* ``gateway.py:251-262`` — 钩子事件分发
+* ``hook.py`` — hook implementation (runs in tmux pane)
+* ``event_reader.py`` — events.jsonl reading
+* ``gateway.py:251-262`` — hook event dispatch
 
-截图捕获
---------
+Screenshot Capture
+------------------
 
 .. code-block:: text
 
@@ -265,16 +267,16 @@ Claude 钩子事件从钩子模块流向用户回调：
        |
        └── return raw PNG bytes
 
-**关键文件：**
+**Key files:**
 
 * ``gateway.py:172-174``
-* ``tmux_manager.py:capture_screenshot()`` — 使用 ImageMagick
+* ``tmux_manager.py:capture_screenshot()`` — uses ImageMagick
 
-窗口生命周期
------------
+Window Lifecycle
+----------------
 
-窗口创建
-~~~~~~~~
+Window Creation
+~~~~~~~~~~~~~~~
 
 .. code-block:: text
 
@@ -289,19 +291,19 @@ Claude 钩子事件从钩子模块流向用户回调：
    |
    ├── session_map_sync.update_session_map()
    |
-   └── [SessionMonitor 在下次轮询时检测]
+   └── [SessionMonitor detects on next poll]
        |
        └── NewWindowEvent emitted
 
-窗口移除
-~~~~~~~~
+Window Removal
+~~~~~~~~~~~~~~
 
 .. code-block:: text
 
    gateway.kill_window(window_id)
    |
    ├── channel_router.unbind_window()
-   |   └── 移除所有频道绑定
+   |   └── removes all channel bindings
    |
    ├── window_store.remove_window()
    |
@@ -310,15 +312,15 @@ Claude 钩子事件从钩子模块流向用户回调：
    |
    └── session_map_sync.remove_window()
 
-**关键文件：**
+**Key files:**
 
 * ``gateway.py:135-140`` — kill_window
 * ``channel_router.py:181-196`` — unbind_window
 
-Provider 检测
--------------
+Provider Detection
+------------------
 
-检测窗口中运行的是哪个 AI 助手：
+Detecting which agent is running in a window:
 
 .. code-block:: text
 
@@ -332,14 +334,14 @@ Provider 检测
    |
    └── return provider name or ""
 
-**关键文件：**
+**Key files:**
 
 * ``providers/__init__.py:102-114`` — detect_provider_from_transcript_path
 
-转录解析
----------
+Transcript Parsing
+------------------
 
-处理新的转录内容：
+Processing new transcript content:
 
 .. code-block:: text
 
@@ -375,8 +377,8 @@ Provider 检测
        |
        └── return (messages, pending_tools)
 
-**关键文件：**
+**Key files:**
 
-* ``transcript_reader.py`` — 文件 I/O
-* ``providers/_jsonl.py`` — 基础 JSONL 解析
-* ``providers/claude.py`` — Claude 特定解析
+* ``transcript_reader.py`` — file I/O
+* ``providers/_jsonl.py`` — base JSONL parsing
+* ``providers/claude.py`` — Claude-specific parsing

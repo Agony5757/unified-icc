@@ -1,22 +1,25 @@
-# Getting Started
+快速开始
+=========
 
-## Contents
+目录
+----
 
-```{toctree}
-:maxdepth: 1
+.. toctree::
+   :maxdepth: 1
 
-installation
-first-steps
-```
+   installation
+   first-steps
 
-## Overview
+概述
+----
 
-This section covers everything you need to get started with unified-icc:
+本节涵盖开始使用 unified-icc 所需了解的所有内容：
 
-1. **Installation** — How to install the package and its dependencies
-2. **First Steps** — Build your first frontend adapter and integrate with the gateway
+1. **安装** — 如何安装包及其依赖
+2. **第一步** — 构建你的第一个前端适配器并接入网关
 
-By the end, you'll have a working integration that can:
-- Create agent windows
-- Route messages between channels and windows
-- Receive and handle agent output events
+学完本节后，你将拥有一个可工作的集成，能够：
+
+- 创建 AI 助手窗口
+- 在频道和窗口之间路由消息
+- 接收并处理 AI 助手的输出事件

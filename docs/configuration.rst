@@ -1,239 +1,232 @@
-Configuration Reference
-======================
+配置参考
+=========
 
-Unified ICC is configured entirely through environment variables (with ``.env`` file support). There are no required platform tokens or API keys in the core library.
+Unified ICC 完全通过环境变量配置（支持 `.env` 文件）。核心库中无需任何平台令牌或 API 密钥。
 
-Configuration Loading
-----------------------
+配置加载顺序
+-------------
 
-Configuration is loaded in this order (later sources override earlier):
+配置按以下顺序加载（后者覆盖前者）：
 
-1. Default values
-2. ``~/.cclark/.env`` file
-3. ``./.env`` file (current working directory)
-4. Environment variables
+1. 默认值
+2. ``~/.cclark/.env`` 文件
+3. ``./.env`` 文件（当前工作目录）
+4. 环境变量
 
-Environment Variables
---------------------
+环境变量
+--------
 
-Core Settings
-~~~~~~~~~~~~
+核心设置
+~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
 
-   * - Variable
-     - Default
-     - Description
+   * - 变量
+     - 默认值
+     - 说明
    * - ``CCLARK_CONFIG_DIR``
      - ``~/.cclark``
-     - Configuration directory
+     - 配置目录
    * - ``CCLARK_PROVIDER``
      - ``claude``
-     - Default agent provider
+     - 默认 AI 助手 Provider
 
-Legacy equivalents: ``CCGRAM_CONFIG_DIR``, ``CCBOT_CONFIG_DIR``
+兼容别名：``CCGRAM_CONFIG_DIR``、``CCBOT_CONFIG_DIR``
 
-Tmux Settings
-~~~~~~~~~~~~
+Tmux 设置
+~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
 
-   * - Variable
-     - Default
-     - Description
+   * - 变量
+     - 默认值
+     - 说明
    * - ``TMUX_SESSION_NAME``
      - ``cclark``
-     - tmux session name
+     - tmux 会话名称
    * - ``TMUX_EXTERNAL_PATTERNS``
-     - (empty)
-     - Patterns for external window discovery
+     - （空）
+     - 外部窗口发现模式
 
-Legacy equivalent: ``CCGRAM_TMUX_SESSION``
+兼容别名：``CCGRAM_TMUX_SESSION``
 
-Monitoring Settings
-~~~~~~~~~~~~~~~~~~~
+监控设置
+~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
 
-   * - Variable
-     - Default
-     - Description
+   * - 变量
+     - 默认值
+     - 说明
    * - ``MONITOR_POLL_INTERVAL``
      - ``1.0``
-     - Poll interval in seconds (min 0.5)
+     - 轮询间隔（秒，最小 0.5）
    * - ``CCLARK_STATUS_POLL_INTERVAL``
      - ``1.0``
-     - Status poll interval in seconds
+     - 状态轮询间隔（秒）
 
-Legacy equivalent: ``CCGRAM_STATUS_POLL_INTERVAL``
+兼容别名：``CCGRAM_STATUS_POLL_INTERVAL``
 
-Agent Settings
-~~~~~~~~~~~~~~
+助手设置
+~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
 
-   * - Variable
-     - Default
-     - Description
+   * - 变量
+     - 默认值
+     - 说明
    * - ``CLAUDE_CONFIG_DIR``
      - ``~/.claude``
-     - Claude configuration directory
+     - Claude 配置目录
    * - ``AUTOCLOSE_DONE_MINUTES``
      - ``30``
-     - Auto-close done sessions after N minutes
+     - 完成后自动关闭（分钟）
    * - ``AUTOCLOSE_DEAD_MINUTES``
      - ``10``
-     - Auto-close dead sessions after N minutes
+     - 死亡会话自动关闭（分钟）
 
-Provider Command Overrides
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Provider 命令覆盖
+~~~~~~~~~~~~~~~~
 
-Override the launch command for each provider:
+覆盖各 Provider 的启动命令：
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
 
-   * - Variable
-     - Format
+   * - 变量
+     - 格式
    * - ``CCLARK_CLAUDE_COMMAND``
-     - Override ``claude`` command
+     - 覆盖 ``claude`` 命令
    * - ``CCLARK_CODEX_COMMAND``
-     - Override ``codex`` command
+     - 覆盖 ``codex`` 命令
    * - ``CCLARK_GEMINI_COMMAND``
-     - Override ``gemini`` command
+     - 覆盖 ``gemini`` 命令
    * - ``CCLARK_PI_COMMAND``
-     - Override ``pi`` command
+     - 覆盖 ``pi`` 命令
    * - ``CCLARK_SHELL_COMMAND``
-     - Override ``shell`` command
+     - 覆盖 ``shell`` 命令
 
-Legacy equivalents: ``CCGRAM_*``, ``CCBOT_*``
+兼容别名：``CCGRAM_*``、``CCBOT_*``
 
-Example .env File
-~~~~~~~~~~~~~~~~~
+示例 .env 文件
+~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
-   # Core settings
+   # 核心设置
    CCLARK_CONFIG_DIR=~/.cclark
    CCLARK_PROVIDER=claude
 
    # Tmux
    TMUX_SESSION_NAME=cclark
 
-   # Monitoring
+   # 监控
    MONITOR_POLL_INTERVAL=1.0
 
-   # Provider overrides
+   # Provider 覆盖
    CCLARK_CLAUDE_COMMAND=/usr/local/bin/claude
 
-GatewayConfig Class
-~~~~~~~~~~~~~~~~~~~
+GatewayConfig 类
+----------------
 
 .. code-block:: python
 
    from unified_icc import GatewayConfig, config
 
-   # Access the global config
+   # 访问全局配置
    print(config.tmux_session_name)  # "cclark"
    print(config.provider_name)     # "claude"
 
-   # Or create a custom config
+   # 或创建自定义配置
    custom_config = GatewayConfig()
    custom_config.tmux_session_name = "my-session"
 
-GatewayConfig Attributes
-~~~~~~~~~~~~~~~~~~~~~~~
+GatewayConfig 属性
+~~~~~~~~~~~~~~~~~~
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 10 60
 
-   * - Attribute
-     - Type
-     - Description
+   * - 属性
+     - 类型
+     - 说明
    * - ``config_dir``
      - ``Path``
-     - Configuration directory
+     - 配置目录
    * - ``tmux_session_name``
      - ``str``
-     - tmux session name
+     - tmux 会话名称
    * - ``tmux_main_window_name``
      - ``str``
-     - Main window name
+     - 主窗口名称
    * - ``own_window_id``
      - ``str | None``
-     - This gateway's window ID
+     - 本网关所在窗口 ID
    * - ``tmux_external_patterns``
      - ``str``
-     - External window patterns
+     - 外部窗口发现模式
    * - ``state_file``
      - ``Path``
-     - Main state file path
+     - 主状态文件路径
    * - ``session_map_file``
      - ``Path``
-     - Session map file path
+     - 会话映射文件路径
    * - ``monitor_state_file``
      - ``Path``
-     - Monitor state file path
+     - 监控状态文件路径
    * - ``events_file``
      - ``Path``
-     - Hook events file path
+     - 钩子事件文件路径
    * - ``mailbox_dir``
      - ``Path``
-     - Mailbox directory path
+     - 邮箱目录路径
    * - ``claude_config_dir``
      - ``Path``
-     - Claude config directory
+     - Claude 配置目录
    * - ``claude_projects_path``
      - ``Path``
-     - Claude projects path
+     - Claude 项目路径
    * - ``monitor_poll_interval``
      - ``float``
-     - Poll interval
+     - 轮询间隔
    * - ``status_poll_interval``
      - ``float``
-     - Status poll interval
+     - 状态轮询间隔
    * - ``provider_name``
      - ``str``
-     - Default provider
+     - 默认 Provider
    * - ``autoclose_done_minutes``
      - ``int``
-     - Auto-close delay for done
+     - 完成状态自动关闭延迟
    * - ``autoclose_dead_minutes``
      - ``int``
-     - Auto-close delay for dead
+     - 死亡状态自动关闭延迟
 
-State Files
------------
+状态文件
+--------
 
-All state files are stored in ``~/.cclark/``:
+所有状态文件存储在 ``~/.cclark/``：
 
 .. list-table::
    :header-rows: 1
-   :widths: 30 70
 
-   * - File
-     - Description
+   * - 文件
+     - 说明
    * - ``state.json``
-     - Gateway state (channels, windows, display names)
+     - 网关状态（频道、窗口、显示名称）
    * - ``session_map.json``
-     - tmux window to agent session mappings
+     - tmux 窗口 ↔ AI 助手会话映射
    * - ``monitor_state.json``
-     - Poll loop offsets and tracked sessions
+     - 轮询偏移量和追踪中的会话
    * - ``events.jsonl``
-     - Hook event log (append-only)
+     - 钩子事件日志（追加写入）
 
-State File Format: state.json
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+状态文件格式：state.json
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: json
 
@@ -251,8 +244,8 @@ State File Format: state.json
        }
    }
 
-State File Format: session_map.json
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+状态文件格式：session_map.json
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: json
 
@@ -266,62 +259,62 @@ State File Format: session_map.json
        }
    }
 
-Custom Configuration Example
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+自定义配置示例
+--------------
 
 .. code-block:: python
 
    from unified_icc import UnifiedICC, GatewayConfig
    import os
 
-   # Option 1: Environment variables
+   # 方式 1：环境变量
    os.environ["TMUX_SESSION_NAME"] = "my-session"
    os.environ["MONITOR_POLL_INTERVAL"] = "0.5"
    gateway = UnifiedICC()
 
-   # Option 2: Custom config object
+   # 方式 2：自定义配置对象
    config = GatewayConfig()
    config.tmux_session_name = "my-session"
    config.monitor_poll_interval = 0.5
    config.state_file = Path("/tmp/my-state.json")
    gateway = UnifiedICC(gateway_config=config)
 
-tmux Requirements
------------------
+tmux 要求
+---------
 
-Unified ICC requires:
+Unified ICC 要求：
 
-- tmux version 2.6 or higher
-- The ability to create new sessions/windows
-- Access to the ``tmux`` command
+- tmux 2.6 或更高版本
+- 能够创建新会话/窗口
+- 可访问 ``tmux`` 命令
 
 tmux Socket
 ~~~~~~~~~~~
 
-By default, unified-icc uses the default tmux socket. To use a custom socket:
+默认 unified-icc 使用默认 tmux socket。使用自定义 socket：
 
 .. code-block:: bash
 
    export TMUX_SOCKET_PATH=/tmp/my-tmux-socket
 
-Window Naming
-~~~~~~~~~~~~~
+窗口命名
+~~~~~~~~
 
-Windows are named automatically. To customize:
+窗口自动命名。自定义显示名称：
 
 .. code-block:: python
 
-   # In your frontend, set display names
+   # 在前端中设置显示名称
    from unified_icc import channel_router
-   channel_router.set_display_name(window_id, "My Project")
+   channel_router.set_display_name(window_id, "我的项目")
 
-Provider-Specific Configuration
--------------------------------
+Provider 特定配置
+-----------------
 
 Claude
 ~~~~~~
 
-Claude Code is auto-detected if ``claude`` is in your PATH. To use a specific version:
+Claude Code 如果 ``claude`` 在 PATH 中则自动检测。指定特定版本：
 
 .. code-block:: bash
 

@@ -1,87 +1,88 @@
-Troubleshooting
-===============
+故障排除
+=========
 
-Common Issues
--------------
+常见问题
+--------
 
-Gateway Won't Start
-~~~~~~~~~~~~~~~~~~
+网关无法启动
+~~~~~~~~~~~~
 
-**Symptom:** ``UnifiedICC().start()`` hangs or fails
+**症状**：``UnifiedICC().start()`` 卡住或失败
 
-**Possible causes:**
+**可能原因**：
 
-1. tmux not installed or not in PATH
-
-   .. code-block:: bash
-
-      tmux -V  # Should show version
-
-2. tmux session already exists with different socket
+1. tmux 未安装或不在 PATH 中
 
    .. code-block:: bash
 
-      tmux list-sessions  # Check existing sessions
+      tmux -V  # 应显示版本号
 
-3. Permission issues with state files
+2. tmux 会话已存在但使用了不同的 socket
+
+   .. code-block:: bash
+
+      tmux list-sessions  # 检查已存在的会话
+
+3. 状态文件权限问题
 
    .. code-block:: bash
 
       ls -la ~/.cclark/
       chmod 755 ~/.cclark/
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Check tmux is available
+   # 检查 tmux 是否可用
    import subprocess
    result = subprocess.run(["tmux", "-V"], capture_output=True)
    print(result.stdout.decode())
 
-   # Check state directory
+   # 检查状态目录
    from unified_icc.utils import cclark_dir
-   print(cclark_dir())  # Should exist and be writable
+   print(cclark_dir())  # 应存在且可写
 
+---
 
-Messages Not Being Received
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+消息未收到
+~~~~~~~~~~
 
-**Symptom:** ``on_message`` callbacks never fire
+**症状**：``on_message`` 回调从未触发
 
-**Possible causes:**
+**可能原因**：
 
-1. Channel not bound to window
+1. 频道未绑定到窗口
 
    .. code-block:: python
 
-      # Check bindings
+      # 检查绑定
       from unified_icc import channel_router
       print(channel_router.bound_channel_ids())
       print(channel_router.bound_window_ids())
 
-2. Session monitor not running
+2. 会话监控器未运行
 
    .. code-block:: python
 
-      # Verify monitor is active
+      # 验证监控器是否活跃
       from unified_icc.session_monitor import get_active_monitor
       monitor = get_active_monitor()
-      print(monitor._running if monitor else "No monitor")
+      print(monitor._running if monitor else "无监控器")
 
-3. Transcript file not being read
+3. 转录文件未被读取
 
    .. code-block:: python
 
-      # Check transcript path
+      # 检查转录路径
       from unified_icc.session_map import session_map_sync
       print(session_map_sync.current_map)
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Manually verify transcript is readable
+   # 手动验证转录文件可读
    import asyncio
    from unified_icc import config
 
@@ -91,259 +92,265 @@ Messages Not Being Received
            async with aiofiles.open(config.session_map_file) as f:
                content = await f.read()
            data = json.loads(content)
-           print("Session map:", data)
+           print("会话映射：", data)
 
    asyncio.run(check_transcripts())
 
+---
 
-Agent Not Responding to Input
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+助手无响应
+~~~~~~~~~~
 
-**Symptom:** ``send_to_window()`` completes but agent doesn't respond
+**症状**：``send_to_window()`` 完成但助手无响应
 
-**Possible causes:**
+**可能原因**：
 
-1. Text not reaching tmux pane
+1. 文本未到达 tmux 窗格
 
    .. code-block:: python
 
-      # Verify pane exists and is writable
+      # 验证窗格存在且可写
       await gateway.capture_pane(window_id)
 
-2. Agent process is not in interactive mode
+2. AI 助手进程不在交互模式
 
    .. code-block:: python
 
-      # Check agent status
+      # 检查助手状态
       status = await gateway.get_provider(window_id).parse_terminal_status(
           await gateway.capture_pane(window_id)
       )
       print(status)
 
-3. tmux pane not attached to correct window
+3. tmux 窗格未连接到正确窗口
 
    .. code-block:: python
 
-      # List all windows
+      # 列出所有窗口
       windows = await gateway.list_windows()
       for w in windows:
           print(f"{w.window_id}: {w.display_name}")
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Debug send operation
+   # 调试发送操作
    import asyncio
 
    async def debug_send(window_id, text):
-       # First capture current state
+       # 先捕获当前状态
        before = await gateway.capture_pane(window_id)
-       print(f"Before:\n{before[-500:]}")
+       print(f"发送前：\n{before[-500:]}")
 
-       # Send
+       # 发送
        await gateway.send_to_window(window_id, text)
 
-       # Wait briefly
+       # 稍等
        await asyncio.sleep(0.5)
 
-       # Capture after state
+       # 捕获发送后状态
        after = await gateway.capture_pane(window_id)
-       print(f"After:\n{after[-500:]}")
+       print(f"发送后：\n{after[-500:]}")
 
    asyncio.run(debug_send("cclark:1", "hello"))
 
+---
 
-State Not Persisting
-~~~~~~~~~~~~~~~~~~~~
+状态未持久化
+~~~~~~~~~~~~
 
-**Symptom:** Bindings disappear after restart
+**症状**：重启后绑定消失
 
-**Possible causes:**
+**可能原因**：
 
-1. State file not writable
+1. 状态文件不可写
 
    .. code-block:: bash
 
       ls -la ~/.cclark/state.json
-      # If doesn't exist, check directory permissions
+      # 若不存在，检查目录权限
 
-2. Persistence not scheduled
+2. 持久化未调度
 
    .. code-block:: python
 
-      # Check dirty flag
+      # 检查脏标记
       from unified_icc import channel_router
-      # StatePersistence uses debouncing, so changes take 0.5s to save
+      # StatePersistence 使用去中心化，所以变更需要 0.5s 才保存
 
-3. Race condition during shutdown
+3. 关机时竞态条件
 
    .. code-block:: python
 
-      # Always stop gracefully
-      await gateway.stop()  # This flushes state
+      # 始终优雅停止
+      await gateway.stop()  # 这会刷新状态
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Manually trigger persistence
+   # 手动触发持久化
    from unified_icc.state_persistence import persistence_manager
 
-   # Make a change
+   # 做一次变更
    channel_router.bind("test:1", "cclark:1")
 
-   # Force save
+   # 强制保存
    if hasattr(persistence_manager, 'flush'):
        persistence_manager.flush()
 
-   # Or wait for debounce
+   # 或等待去中心化
    import asyncio
-   await asyncio.sleep(1.0)  # Debounce is 0.5s
+   await asyncio.sleep(1.0)  # 去中心化延迟为 0.5s
 
+---
 
-Provider Not Detected
-~~~~~~~~~~~~~~~~~~~~~
+Provider 未检测到
+~~~~~~~~~~~~~~~~
 
-**Symptom:** Wrong provider detected, or no provider
+**症状**：检测到错误的 Provider，或无 Provider
 
-**Possible causes:**
+**可能原因**：
 
-1. Provider binary not in PATH
+1. Provider 二进制文件不在 PATH 中
 
    .. code-block:: bash
 
-      which claude  # or codex, gemini, pi
+      which claude  # 或 codex、gemini、pi
 
-2. Transcript path doesn't match patterns
+2. 转录路径不匹配模式
 
    .. code-block:: python
 
       from unified_icc.providers import detect_provider_from_transcript_path
 
-      # Test detection
+      # 测试检测
       path = "~/.claude/projects/myproj/.claude/history/session.jsonl"
       provider = detect_provider_from_transcript_path(path)
-      print(f"Detected: {provider}")
+      print(f"检测到：{provider}")
 
-3. Pane title not set correctly
+3. 窗格标题未正确设置
 
    .. code-block:: bash
 
-      # Check tmux window title
+      # 检查 tmux 窗口标题
       tmux display-message -t cclark:1 -p '#{window_name}'
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Explicitly specify provider when creating window
+   # 创建窗口时显式指定 Provider
    window = await gateway.create_window(
        work_dir="/path",
-       provider="claude"  # Explicit provider
+       provider="claude"  # 显式指定
    )
 
-   # Or set default in environment
+   # 或在环境中设置默认
    import os
    os.environ["CCLARK_PROVIDER"] = "claude"
 
+---
 
-Hook Events Not Received
-~~~~~~~~~~~~~~~~~~~~~~~~
+钩子事件未收到
+~~~~~~~~~~~~~~
 
-**Symptom:** ``on_hook_event`` callbacks never fire (Claude only)
+**症状**：``on_hook_event`` 回调从未触发（仅 Claude）
 
-**Possible causes:**
+**可能原因**：
 
-1. Hook not installed in Claude
+1. Claude 中未安装钩子
 
    .. code-block:: bash
 
-      # Check Claude config
+      # 检查 Claude 配置
       cat ~/.claude/settings.json | grep hook
 
-2. events.jsonl not writable
+2. events.jsonl 不可写
 
    .. code-block:: bash
 
       ls -la ~/.cclark/events.jsonl
 
-3. Hook module not loaded
+3. 钩子模块未加载
 
    .. code-block:: python
 
-      # Verify hook is installed
+      # 验证钩子已安装
       from unified_icc import hook
       print(hook.__file__)
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Install hook manually
+   # 手动安装钩子
    from unified_icc.hook import install_hooks
 
-   # This writes hook files to ~/.claude/
-   # Note: Requires Claude restart to take effect
+   # 这会将钩子文件写入 ~/.claude/
+   # 注意：需要重启 Claude 才能生效
 
+---
 
-Screenshot Capture Fails
-~~~~~~~~~~~~~~~~~~~~~~~~
+截图捕获失败
+~~~~~~~~~~~~
 
-**Symptom:** ``capture_screenshot()`` raises error
+**症状**：``capture_screenshot()`` 报错
 
-**Possible causes:**
+**可能原因**：
 
-1. ImageMagick not installed
+1. ImageMagick 未安装
 
    .. code-block:: bash
 
-      convert --version  # or
+      convert --version  # 或
       import subprocess; subprocess.run(["import", "-version"])
 
-2. DISPLAY not set (for X11)
+2. DISPLAY 未设置（X11 环境下）
 
    .. code-block:: bash
 
-      echo $DISPLAY  # Should be :0 or similar
+      echo $DISPLAY  # 应为 :0 或类似值
 
-3. tmux capture not working
+3. tmux 捕获不工作
 
    .. code-block:: python
 
-      # Test basic capture
+      # 测试基本捕获
       content = await gateway.capture_pane(window_id)
-      print(f"Capture works: {len(content)} chars")
+      print(f"捕获可用：{len(content)} 字符")
 
-**Solution:**
+**解决方案**：
 
 .. code-block:: python
 
-   # Check dependencies
+   # 检查依赖
    import shutil
-   print(f"ImageMagick: {shutil.which('import')}")
-   print(f"DISPLAY: {import os; os.environ.get('DISPLAY')}")
+   print(f"ImageMagick：{shutil.which('import')}")
+   print(f"DISPLAY：{import os; os.environ.get('DISPLAY')}")
 
-   # Try capture with error handling
+   # 带错误处理尝试捕获
    try:
        image_bytes = await gateway.capture_screenshot(window_id)
    except Exception as e:
-       print(f"Screenshot failed: {e}")
-       # Fall back to text capture
+       print(f"截图失败：{e}")
+       # 回退到文本捕获
        text = await gateway.capture_pane(window_id)
 
+---
 
-Debug Logging
--------------
+调试日志
+--------
 
-Enable debug logging to trace issues:
+启用调试日志来追踪问题：
 
 .. code-block:: python
 
    import structlog
    import logging
 
-   # Configure structlog
+   # 配置 structlog
    structlog.configure(
        processors=[
            structlog.processors.TimeStamper(fmt="iso"),
@@ -352,25 +359,24 @@ Enable debug logging to trace issues:
        ],
    )
 
-   # Set log level
+   # 设置日志级别
    logging.getLogger("unified_icc").setLevel(logging.DEBUG)
 
-Or via environment:
+或通过环境变量：
 
 .. code-block:: bash
 
    export LOG_LEVEL=DEBUG
 
-Getting Help
-------------
+获取帮助
+--------
 
-If you're still stuck:
+如果仍然卡住：
 
-1. Enable debug logging and capture relevant output
-2. Check the `GitHub Issues <https://github.com/Agony5757/unified-icc/issues>`_
-3. Include:
-
-   - Python version (``python --version``)
-   - tmux version (``tmux -V``)
-   - Relevant logs
-   - Minimal reproduction code
+1. 启用调试日志并捕获相关输出
+2. 查看 `GitHub Issues <https://github.com/Agony5757/unified-icc/issues>`_
+3. 附上：
+   - Python 版本（``python --version``）
+   - tmux 版本（``tmux -V``）
+   - 相关日志
+   - 最小复现代码

@@ -1,113 +1,139 @@
-# Getting Started
+安装
+========
 
-## Installation
+使用 uv（推荐）
+-----------------
 
-### Using uv (Recommended)
+.. code-block:: bash
 
-```bash
-uv pip install unified-icc
-```
+   uv pip install unified-icc
 
-Or add to your project:
+或添加到你的项目中：
 
-```bash
-uv add unified-icc
-```
+.. code-block:: bash
 
-### From Source
+   uv add unified-icc
 
-```bash
-git clone https://github.com/Agony5757/unified-icc.git
-cd unified-icc
-uv pip install -e .
-```
+从源码安装
+----------
 
-### Development Installation
+.. code-block:: bash
 
-```bash
-git clone https://github.com/Agony5757/unified-icc.git
-cd unified-icc
-uv sync
-uv pip install -e ".[dev]"
-```
+   git clone https://github.com/Agony5757/unified-icc.git
+   cd unified-icc
+   uv pip install -e .
 
-## Requirements
+开发环境安装
+------------
 
-- Python 3.12 or higher
-- tmux 2.6 or higher
-- A supported agent CLI (Claude Code, Codex CLI, Gemini CLI, etc.)
+.. code-block:: bash
 
-## Quick Start
+   git clone https://github.com/Agony5757/unified-icc.git
+   cd unified-icc
+   uv sync
+   uv pip install -e ".[dev]"
 
-### 1. Create a Gateway Instance
+系统要求
+--------
 
-```python
-import asyncio
-from unified_icc import UnifiedICC
+- Python 3.12 或更高版本
+- tmux 2.6 或更高版本
+- 一个受支持的 AI 助手 CLI（Claude Code、Codex CLI、Gemini CLI 等）
 
-async def main():
-    gateway = UnifiedICC()
-    await gateway.start()
+快速开始
+--------
 
-    # Your code here...
+1. 创建网关实例
+~~~~~~~~~~~~~~
 
-    await gateway.stop()
+.. code-block:: python
 
-asyncio.run(main())
-```
+   import asyncio
+   from unified_icc import UnifiedICC
 
-### 2. Create a Window with an Agent
+   async def main():
+       gateway = UnifiedICC()
+       await gateway.start()
 
-```python
-window = await gateway.create_window(
-    work_dir="/path/to/project",
-    provider="claude",  # or "codex", "gemini", "pi", "shell"
-)
-print(f"Created window: {window.window_id}")
-```
+       # 在这里写你的代码...
 
-### 3. Bind a Messaging Channel
+       await gateway.stop()
 
-```python
-gateway.bind_channel(
-    channel_id="feishu:chat_123:thread_456",
-    window_id=window.window_id,
-)
-```
+   asyncio.run(main())
 
-### 4. Subscribe to Events
+2. 创建带助手的窗口
+~~~~~~~~~~~~~~~~~~~~~
 
-```python
-def handle_message(event):
-    for msg in event.messages:
-        print(f"[{msg.role}] {msg.text}")
+.. code-block:: python
 
-gateway.on_message(handle_message)
-```
+   window = await gateway.create_window(
+       work_dir="/path/to/project",
+       provider="claude",  # 或 "codex"、"gemini"、"pi"、"shell"
+   )
+   print(f"已创建窗口：{window.window_id}")
 
-### 5. Send Input to the Agent
+3. 绑定消息频道
+~~~~~~~~~~~~~~
 
-```python
-await gateway.send_to_window(window.window_id, "Hello!")
-```
+.. code-block:: python
 
-## Environment Variables
+   gateway.bind_channel(
+       channel_id="feishu:chat_123:thread_456",
+       window_id=window.window_id,
+   )
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CCLARK_CONFIG_DIR` | `~/.cclark` | Configuration directory |
-| `TMUX_SESSION_NAME` | `cclark` | tmux session name |
-| `CCLARK_PROVIDER` | `claude` | Default agent provider |
-| `MONITOR_POLL_INTERVAL` | `1.0` | Poll interval in seconds |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude config directory |
+4. 订阅事件
+~~~~~~~~~~
 
-Legacy environment variables are also supported for backward compatibility:
-- `CCGRAM_*` (ccgram era)
-- `CCBOT_*` (original naming)
+.. code-block:: python
 
-## Next Steps
+   def handle_message(event):
+       for msg in event.messages:
+           print(f"[{msg.role}] {msg.text}")
 
-- Read the [Architecture Overview](../architecture.rst) for a deeper understanding
-- Explore the [API Reference](../api-reference/index.rst) for all available methods
-- Learn about [Providers](../providers/index.rst) and how they work
-- Check [Configuration](../configuration.rst) for all options
+   gateway.on_message(handle_message)
+
+5. 向助手发送输入
+~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   await gateway.send_to_window(window.window_id, "你好！")
+
+环境变量
+--------
+
+.. list-table::
+   :header-rows: 1
+
+   * - 变量
+     - 默认值
+     - 说明
+   * - ``CCLARK_CONFIG_DIR``
+     - ``~/.cclark``
+     - 配置目录
+   * - ``TMUX_SESSION_NAME``
+     - ``cclark``
+     - tmux 会话名称
+   * - ``CCLARK_PROVIDER``
+     - ``claude``
+     - 默认 AI 助手 Provider
+   * - ``MONITOR_POLL_INTERVAL``
+     - ``1.0``
+     - 轮询间隔（秒）
+   * - ``CLAUDE_CONFIG_DIR``
+     - ``~/.claude``
+     - Claude 配置目录
+
+为保持向后兼容，也支持旧版环境变量：
+
+- ``CCGRAM_*``（ccgram 时期）
+- ``CCBOT_*``（原始命名）
+
+下一步
+------
+
+- 阅读 `架构概览 <../architecture.rst>`_ 深入了解系统
+- 查阅 `API 参考 <../api-reference/index.rst>`_ 了解所有可用方法
+- 学习 `Provider <../providers/index.rst>`_ 及其工作原理
+- 查看 `配置 <../configuration.rst>`_ 了解所有选项

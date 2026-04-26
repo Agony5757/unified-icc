@@ -1,8 +1,8 @@
-API Reference
-=============
+API 参考
+=========
 
-Core Classes
-------------
+核心类
+------
 
 .. toctree::
    :maxdepth: 1
@@ -12,101 +12,101 @@ Core Classes
    events
    channel-router
 
-Public API
-----------
+公共 API
+--------
 
-The ``unified_icc`` package exports the following public API:
+``unified_icc`` 包导出以下公共 API：
 
 .. code-block:: python
 
    from unified_icc import (
-       # Main gateway
+       # 主网关
        UnifiedICC,
        WindowInfo,
 
-       # Adapter protocol
+       # 适配器协议
        FrontendAdapter,
        CardPayload,
        InteractivePrompt,
 
-       # Events
+       # 事件
        AgentMessageEvent,
        StatusEvent,
        HookEvent,
        WindowChangeEvent,
 
-       # Configuration
+       # 配置
        GatewayConfig,
        config,
 
-       # Channel routing (singleton)
+       # 频道路由（单例）
        channel_router,
    )
 
-Module Index
-------------
+模块索引
+--------
 
-**Gateway**
+**网关**
 
-* ``gateway`` - UnifiedICC main class
-* ``config`` - GatewayConfig
-* ``channel_router`` - ChannelRouter singleton
+* ``gateway`` — UnifiedICC 主类
+* ``config`` — GatewayConfig
+* ``channel_router`` — ChannelRouter 单例
 
-**Events**
+**事件**
 
-* ``event_types`` - AgentMessageEvent, StatusEvent, HookEvent, WindowChangeEvent
-* ``adapter`` - FrontendAdapter protocol, CardPayload, InteractivePrompt
-* ``monitor_events`` - Internal event types (NewMessage, NewWindowEvent)
+* ``event_types`` — AgentMessageEvent、StatusEvent、HookEvent、WindowChangeEvent
+* ``adapter`` — FrontendAdapter 协议、CardPayload、InteractivePrompt
+* ``monitor_events`` — 内部事件类型（NewMessage、NewWindowEvent）
 
-**Session Management**
+**会话管理**
 
-* ``session`` - SessionManager
-* ``session_monitor`` - SessionMonitor poll loop
-* ``session_lifecycle`` - Session map diffing
-* ``session_map`` - Session map I/O
-* ``idle_tracker`` - Per-session idle timers
+* ``session`` — SessionManager
+* ``session_monitor`` — SessionMonitor 轮询循环
+* ``session_lifecycle`` — 会话映射对比
+* ``session_map`` — 会话映射 I/O
+* ``idle_tracker`` — 每会话空闲计时器
 
-**State**
+**状态**
 
-* ``state_persistence`` - Debounced JSON persistence
-* ``window_state_store`` - Window state tracking
-* ``monitor_state`` - Poll loop offsets
+* ``state_persistence`` — 去中心化 JSON 持久化
+* ``window_state_store`` — 窗口状态追踪
+* ``monitor_state`` — 轮询偏移量
 
 **I/O**
 
-* ``tmux_manager`` - tmux operations
-* ``transcript_reader`` - Transcript I/O
-* ``transcript_parser`` - Transcript -> messages
-* ``terminal_parser`` - Terminal UI detection
-* ``event_reader`` - events.jsonl reading
-* ``window_view`` - Window snapshots
-* ``window_resolver`` - Window ID remapping
+* ``tmux_manager`` — tmux 操作
+* ``transcript_reader`` — 转录 I/O
+* ``transcript_parser`` — 转录 → 消息
+* ``terminal_parser`` — 终端 UI 检测
+* ``event_reader`` — events.jsonl 读取
+* ``window_view`` — 窗口快照
+* ``window_resolver`` — 窗口 ID 重映射
 
-**Hooks**
+**钩子**
 
-* ``hook`` - Claude hook events
+* ``hook`` — Claude 钩子事件
 
-**Utilities**
+**工具**
 
-* ``utils`` - Utility functions
-* ``mailbox`` - Agent-to-agent messages
-* ``cc_commands`` - Claude command discovery
-* ``expandable_quote`` - Expandable text blocks
-* ``topic_state_registry`` - Topic state
-* ``claude_task_state`` - Claude task tracking
+* ``utils`` — 工具函数
+* ``mailbox`` — 助手间消息
+* ``cc_commands`` — Claude 命令发现
+* ``expandable_quote`` — 可展开文本块
+* ``topic_state_registry`` — 话题状态
+* ``claude_task_state`` — Claude 任务追踪
 
-**Providers**
+**Provider**
 
-* ``providers`` - Provider registry and helpers
-* ``providers.base`` - AgentProvider protocol
-* ``providers.registry`` - ProviderRegistry
-* ``providers.claude`` - Claude provider
-* ``providers.codex`` - Codex provider
-* ``providers.gemini`` - Gemini provider
-* ``providers.pi`` - Pi provider
-* ``providers.shell`` - Shell provider
+* ``providers`` — Provider 注册表和辅助函数
+* ``providers.base`` — AgentProvider 协议
+* ``providers.registry`` — ProviderRegistry
+* ``providers.claude`` — Claude Provider
+* ``providers.codex`` — Codex Provider
+* ``providers.gemini`` — Gemini Provider
+* ``providers.pi`` — Pi Provider
+* ``providers.shell`` — Shell Provider
 
-Call Stacks
------------
+函数调用栈
+----------
 
-For detailed function call chains, see :doc:`call-stacks`.
+关于关键操作的详细函数调用链，请参见 :doc:`call-stacks`。

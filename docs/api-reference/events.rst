@@ -1,7 +1,7 @@
-Event Types Reference
-=====================
+事件类型参考
+=============
 
-All events emitted by the gateway to frontend adapters.
+网关向前端适配器发出的所有事件。
 
 .. code-block:: python
 
@@ -10,7 +10,7 @@ All events emitted by the gateway to frontend adapters.
 AgentMessageEvent
 -----------------
 
-Emitted when the agent produces new output (assistant messages, tool results, etc.).
+当 AI 助手产生新输出（助手消息、工具结果等）时发出。
 
 .. code-block:: python
 
@@ -21,17 +21,17 @@ Emitted when the agent produces new output (assistant messages, tool results, et
        messages: list[AgentMessage]
        channel_ids: list[str] = field(default_factory=list)
 
-**Attributes:**
+**属性：**
 
-* ``window_id`` (str): tmux window that produced the message
-* ``session_id`` (str): Agent session ID
-* ``messages`` (list[AgentMessage]): Parsed messages from the transcript
-* ``channel_ids`` (list[str]): Channels bound to this window
+* ``window_id``（str）：产生消息的 tmux 窗口
+* ``session_id``（str）：AI 助手会话 ID
+* ``messages``（list[AgentMessage]）：从转录解析的消息
+* ``channel_ids``（list[str]）：绑定到此窗口的频道
 
 AgentMessage
 ~~~~~~~~~~~~
 
-Individual message within an event.
+事件中的单条消息。
 
 .. code-block:: python
 
@@ -46,29 +46,29 @@ Individual message within an event.
        tool_name: str | None = None
        timestamp: str | None = None
 
-**Content Types:**
+**内容类型：**
 
-* **text** - Regular text output
-* **thinking** - Claude's thinking/reasoning output
-* **tool_use** - Tool invocation (with tool_name, tool_use_id)
-* **tool_result** - Tool execution result
-* **local_command** - CLI commands like /help, /clear
+* **text** — 普通文本输出
+* **thinking** — Claude 的思考/推理输出
+* **tool_use** — 工具调用（带 tool_name、tool_use_id）
+* **tool_result** — 工具执行结果
+* **local_command** — 如 /help、/clear 等 CLI 命令
 
-**Example:**
+**示例：**
 
 .. code-block:: python
 
    def on_message(event: AgentMessageEvent):
        for msg in event.messages:
            if msg.content_type == "tool_use":
-               print(f"Running tool: {msg.tool_name}")
+               print(f"运行工具：{msg.tool_name}")
            elif msg.content_type == "text":
-               print(f"Agent: {msg.text}")
+               print(f"助手：{msg.text}")
 
 StatusEvent
 -----------
 
-Emitted when agent status changes.
+当 AI 助手状态变更时发出。
 
 .. code-block:: python
 
@@ -80,33 +80,33 @@ Emitted when agent status changes.
        display_label: str
        channel_ids: list[str] = field(default_factory=list)
 
-**Status Values:**
+**状态值：**
 
-* **working** - Agent is actively processing
-* **idle** - Agent is waiting for input
-* **done** - Task completed successfully
-* **dead** - Agent process died/crashed
-* **interactive** - Agent is waiting for user confirmation (permission prompt)
+* **working** — AI 助手正在处理
+* **idle** — AI 助手等待输入
+* **done** — 任务成功完成
+* **dead** — AI 助手进程死亡/崩溃
+* **interactive** — AI 助手等待用户确认（权限提示）
 
-**Example:**
+**示例：**
 
 .. code-block:: python
 
    def on_status(event: StatusEvent):
        status_emoji = {
-           "working": "working",
-           "idle": "idle",
-           "done": "done",
-           "dead": "dead",
-           "interactive": "interactive",
+           "working": "工作中",
+           "idle": "空闲",
+           "done": "完成",
+           "dead": "死亡",
+           "interactive": "交互中",
        }
        emoji = status_emoji.get(event.status, "?")
-       print(f"{emoji} {event.display_label}: {event.status}")
+       print(f"{emoji} {event.display_label}：{event.status}")
 
 HookEvent
 ---------
 
-Forwarded hook event from the agent's hook system.
+转发来自 AI 助手钩子系统的事件。
 
 .. code-block:: python
 
@@ -117,27 +117,27 @@ Forwarded hook event from the agent's hook system.
        session_id: str
        data: dict[str, Any]
 
-**Common Event Types:**
+**常见事件类型：**
 
-* **SessionStart** - New agent session started
-* **Notification** - Agent wants to show a notification
-* **Stop** - Agent stopped
-* **Task** - Task state update
+* **SessionStart** — 新 AI 助手会话已启动
+* **Notification** — AI 助手要显示通知
+* **Stop** — AI 助手停止
+* **Task** — 任务状态更新
 
-**Example:**
+**示例：**
 
 .. code-block:: python
 
    def on_hook(event: HookEvent):
        if event.event_type == "SessionStart":
-           print(f"New session: {event.session_id}")
+           print(f"新会话：{event.session_id}")
        elif event.event_type == "Notification":
-           print(f"Notification: {event.data.get('message')}")
+           print(f"通知：{event.data.get('message')}")
 
 WindowChangeEvent
 -----------------
 
-Emitted when a window is created, removed, or dies.
+当窗口被创建、移除或死亡时发出。
 
 .. code-block:: python
 
@@ -149,31 +149,31 @@ Emitted when a window is created, removed, or dies.
        cwd: str
        display_name: str = ""
 
-**Change Types:**
+**变更类型：**
 
-* **new** - New window created
-* **removed** - Window explicitly removed
-* **died** - Window process crashed
+* **new** — 创建了新窗口
+* **removed** — 窗口被显式移除
+* **died** — 窗口进程崩溃
 
-**Example:**
+**示例：**
 
 .. code-block:: python
 
    def on_window_change(event: WindowChangeEvent):
        if event.change_type == "new":
-           print(f"New window: {event.window_id} ({event.provider})")
-           # Bind to channel
+           print(f"新窗口：{event.window_id}（{event.provider}）")
+           # 绑定到频道
            gateway.bind_channel("my_channel", event.window_id)
 
-Internal Event Types
---------------------
+内部事件类型
+------------
 
-These are used internally by the monitoring subsystem:
+监控子系统内部使用的事件：
 
 .. code-block:: python
 
    from unified_icc.monitor_events import NewMessage, NewWindowEvent, SessionInfo
 
-* **NewMessage** - Internal message representation from transcript reader
-* **NewWindowEvent** - Internal window event from session lifecycle
-* **SessionInfo** - Session information from projects scan
+* **NewMessage** — 来自转录读取器的内部消息表示
+* **NewWindowEvent** — 来自会话生命周期的内部窗口事件
+* **SessionInfo** — 来自项目扫描的会话信息

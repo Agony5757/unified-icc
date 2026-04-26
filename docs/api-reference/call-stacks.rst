@@ -1,12 +1,12 @@
-Call Stacks
+函数调用栈
 ===========
 
-This document traces the function call chains for key operations in unified-icc.
+本文档追踪 unified-icc 关键操作的函数调用链。
 
-Window Creation
----------------
+窗口创建
+--------
 
-Creating a new agent window involves multiple subsystems:
+创建新的 AI 助手窗口涉及多个子系统：
 
 .. code-block:: text
 
@@ -35,16 +35,16 @@ Creating a new agent window involves multiple subsystems:
    |
    └── return WindowInfo(...)
 
-**Key files:**
+**关键文件：**
 
 * ``gateway.py:113-133`` — create_window
-* ``tmux_manager.py:200-350`` — create_window internals
-* ``session_map.py`` — session map updates
+* ``tmux_manager.py:200-350`` — create_window 内部
+* ``session_map.py`` — session map 更新
 
-Message Routing
----------------
+消息路由
+--------
 
-Routing an incoming message from frontend to agent:
+将前端收到的消息路由到助手：
 
 .. code-block:: text
 
@@ -57,18 +57,18 @@ Routing an incoming message from frontend to agent:
    |   └── tmux_manager.send_to_window(window_id, text)
    |       └── Pane.send_keys(text + "\n")
    |
-   └── Frontend sends response via adapter
+   └── Frontend 通过适配器发送响应
 
-**Key files:**
+**关键文件：**
 
 * ``channel_router.py:202-204`` — resolve_window
 * ``gateway.py:158-160`` — send_to_window
 * ``tmux_manager.py:400-450`` — send_to_window
 
-Output Capture and Emission
----------------------------
+输出捕获与触发
+--------------
 
-Agent output is detected, parsed, and emitted as events:
+检测、解析 AI 助手输出并触发事件：
 
 .. code-block:: text
 
@@ -107,17 +107,17 @@ Agent output is detected, parsed, and emitted as events:
            ├── AgentMessageEvent(window_id, session_id, messages, channel_ids)
            └── user callbacks invoked
 
-**Key files:**
+**关键文件：**
 
 * ``session_monitor.py:305-386`` — _monitor_loop
 * ``session_monitor.py:143-196`` — check_for_updates
 * ``transcript_reader.py`` — TranscriptReader
-* ``providers/*/parse_transcript_entries()`` — provider parsing
+* ``providers/*/parse_transcript_entries()`` — provider 解析
 
-Channel Binding
----------------
+频道绑定
+--------
 
-Binding a messaging channel to a window:
+将消息频道绑定到窗口：
 
 .. code-block:: text
 
@@ -136,13 +136,13 @@ Binding a messaging channel to a window:
    |
    └── StatePersistence.save() after 0.5s debounce
 
-**Key files:**
+**关键文件：**
 
 * ``channel_router.py:100-164`` — bind
 * ``state_persistence.py`` — debounced writes
 
-Event Subscription and Emission
--------------------------------
+事件订阅与触发
+--------------
 
 .. code-block:: text
 
@@ -152,7 +152,7 @@ Event Subscription and Emission
 
    ...
 
-   Agent output detected
+   检测到 AI 助手输出
    |
    └── SessionMonitor._monitor_loop()
        |
@@ -172,15 +172,15 @@ Event Subscription and Emission
                                |
                                └── user_handler(event)
 
-**Key files:**
+**关键文件：**
 
-* ``gateway.py:178-179`` — on_message registration
-* ``gateway.py:213-234`` — _on_new_message dispatch
+* ``gateway.py:178-179`` — on_message 注册
+* ``gateway.py:213-234`` — _on_new_message 分发
 
-State Persistence
------------------
+状态持久化
+----------
 
-Saving state after a change:
+变更后保存状态：
 
 .. code-block:: text
 
@@ -200,28 +200,28 @@ Saving state after a change:
    |
    └── clear dirty flag
 
-**Key files:**
+**关键文件：**
 
-* ``state_persistence.py`` — full implementation
-* ``utils.py:atomic_write_json()`` — atomic write helper
+* ``state_persistence.py`` — 完整实现
+* ``utils.py:atomic_write_json()`` — 原子写入辅助函数
 
-Hook Event Handling
--------------------
+钩子事件处理
+-----------
 
-Claude hook events flow from the hook module to user callbacks:
+Claude 钩子事件从钩子模块流向用户回调：
 
 .. code-block:: text
 
-   hook.py (runs inside tmux pane alongside Claude)
+   hook.py（在随 Claude 一起运行的 tmux 窗格中）
    |
-   ├── Claude emits hook event
+   ├── Claude 发出钩子事件
    |
-   ├── hook.handle_hook() reads from stdin
+   ├── hook.handle_hook() 从 stdin 读取
    |
    ├── hook.write_to_event_log()
-   |   └── append to events.jsonl
+   |   └── 追加到 events.jsonl
    |
-   └── [separate gateway process monitoring]
+   └── [单独监控网关进程]
 
    SessionMonitor._read_hook_events()
    |
@@ -243,14 +243,14 @@ Claude hook events flow from the hook module to user callbacks:
                    |
                    └── cb(hook_evt)
 
-**Key files:**
+**关键文件：**
 
-* ``hook.py`` — hook implementation (runs in tmux pane)
-* ``event_reader.py`` — events.jsonl reading
-* ``gateway.py:251-262`` — hook event dispatch
+* ``hook.py`` — 钩子实现（在 tmux 窗格中运行）
+* ``event_reader.py`` — events.jsonl 读取
+* ``gateway.py:251-262`` — 钩子事件分发
 
-Screenshot Capture
-------------------
+截图捕获
+--------
 
 .. code-block:: text
 
@@ -265,16 +265,16 @@ Screenshot Capture
        |
        └── return raw PNG bytes
 
-**Key files:**
+**关键文件：**
 
 * ``gateway.py:172-174``
-* ``tmux_manager.py:capture_screenshot()`` — uses ImageMagick
+* ``tmux_manager.py:capture_screenshot()`` — 使用 ImageMagick
 
-Window Lifecycle
-----------------
+窗口生命周期
+-----------
 
-Window Creation
-~~~~~~~~~~~~~~~
+窗口创建
+~~~~~~~~
 
 .. code-block:: text
 
@@ -289,19 +289,19 @@ Window Creation
    |
    ├── session_map_sync.update_session_map()
    |
-   └── [SessionMonitor detects on next poll]
+   └── [SessionMonitor 在下次轮询时检测]
        |
        └── NewWindowEvent emitted
 
-Window Removal
-~~~~~~~~~~~~~~
+窗口移除
+~~~~~~~~
 
 .. code-block:: text
 
    gateway.kill_window(window_id)
    |
    ├── channel_router.unbind_window()
-   |   └── removes all channel bindings
+   |   └── 移除所有频道绑定
    |
    ├── window_store.remove_window()
    |
@@ -310,15 +310,15 @@ Window Removal
    |
    └── session_map_sync.remove_window()
 
-**Key files:**
+**关键文件：**
 
 * ``gateway.py:135-140`` — kill_window
 * ``channel_router.py:181-196`` — unbind_window
 
-Provider Detection
-------------------
+Provider 检测
+-------------
 
-Detecting which agent is running in a window:
+检测窗口中运行的是哪个 AI 助手：
 
 .. code-block:: text
 
@@ -332,14 +332,14 @@ Detecting which agent is running in a window:
    |
    └── return provider name or ""
 
-**Key files:**
+**关键文件：**
 
 * ``providers/__init__.py:102-114`` — detect_provider_from_transcript_path
 
-Transcript Parsing
-------------------
+转录解析
+---------
 
-Processing new transcript content:
+处理新的转录内容：
 
 .. code-block:: text
 
@@ -375,8 +375,8 @@ Processing new transcript content:
        |
        └── return (messages, pending_tools)
 
-**Key files:**
+**关键文件：**
 
-* ``transcript_reader.py`` — file I/O
-* ``providers/_jsonl.py`` — base JSONL parsing
-* ``providers/claude.py`` — Claude-specific parsing
+* ``transcript_reader.py`` — 文件 I/O
+* ``providers/_jsonl.py`` — 基础 JSONL 解析
+* ``providers/claude.py`` — Claude 特定解析

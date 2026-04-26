@@ -1,10 +1,12 @@
-适配器协议参考
-==============
+:orphan:
+
+Adapter Protocol Reference
+===========================
 
 FrontendAdapter
-----------------
+---------------
 
-每个消息平台适配器必须实现的协议。
+Protocol that each messaging platform adapter must implement.
 
 .. code-block:: python
 
@@ -20,20 +22,20 @@ FrontendAdapter
        async def send_file(self, channel_id: str, file_path: str, caption: str = "") -> str
        async def show_prompt(self, channel_id: str, prompt: InteractivePrompt) -> str
 
-方法详情
-~~~~~~~~~
+Method Details
+~~~~~~~~~~~~~~~
 
 send_text
 ^^^^^^^^^
 
-发送纯文本消息。
+Send plain text message.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``text``（str）：消息文本
+* ``channel_id`` (str): Target channel identifier
+* ``text`` (str): Message text
 
-**返回：** 平台消息 ID
+**Returns:** Platform message ID
 
 .. code-block:: python
 
@@ -43,14 +45,14 @@ send_text
 send_card
 ^^^^^^^^^
 
-发送带格式的富文本卡片/消息。
+Send a rich card/message with formatting.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``card``（CardPayload）：富卡片数据
+* ``channel_id`` (str): Target channel identifier
+* ``card`` (CardPayload): Rich card data
 
-**返回：** 平台消息 ID
+**Returns:** Platform message ID
 
 .. code-block:: python
 
@@ -61,13 +63,13 @@ send_card
 update_card
 ^^^^^^^^^^^
 
-就地更新现有卡片消息。
+Update an existing card message in-place.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``card_id``（str）：要更新的卡片消息 ID
-* ``card``（CardPayload）：新卡片数据
+* ``channel_id`` (str): Target channel identifier
+* ``card_id`` (str): Message ID of the card to update
+* ``card`` (CardPayload): New card data
 
 .. code-block:: python
 
@@ -78,15 +80,15 @@ update_card
 send_image
 ^^^^^^^^^^
 
-发送图片。
+Send an image.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``image_bytes``（bytes）：PNG/JPEG 图片数据
-* ``caption``（str）：可选图片说明
+* ``channel_id`` (str): Target channel identifier
+* ``image_bytes`` (bytes): PNG/JPEG image data
+* ``caption`` (str): Optional image caption
 
-**返回：** 平台消息 ID
+**Returns:** Platform message ID
 
 .. code-block:: python
 
@@ -100,15 +102,15 @@ send_image
 send_file
 ^^^^^^^^^
 
-发送文件附件。
+Send a file attachment.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``file_path``（str）：磁盘上的文件路径
-* ``caption``（str）：可选文件说明
+* ``channel_id`` (str): Target channel identifier
+* ``file_path`` (str): Path to file on disk
+* ``caption`` (str): Optional file caption
 
-**返回：** 平台消息 ID
+**Returns:** Platform message ID
 
 .. code-block:: python
 
@@ -122,14 +124,14 @@ send_file
 show_prompt
 ^^^^^^^^^^^
 
-显示带按钮或选项的交互式提示。
+Show an interactive prompt with buttons or selections.
 
-**参数：**
+**Parameters:**
 
-* ``channel_id``（str）：目标频道标识符
-* ``prompt``（InteractivePrompt）：提示数据
+* ``channel_id`` (str): Target channel identifier
+* ``prompt`` (InteractivePrompt): Prompt data
 
-**返回：** 平台消息 ID
+**Returns:** Platform message ID
 
 .. code-block:: python
 
@@ -142,56 +144,38 @@ show_prompt
 CardPayload
 -----------
 
-用于富卡片/消息内容的数据类。
+Dataclass for rich card/message content.
 
 .. code-block:: python
 
    from unified_icc import CardPayload
 
-**属性：**
+**Attributes:**
 
-.. list-table::
-   :header-rows: 1
+===============  ====================  ============  ============
+Attribute        Type                  Default       Description
+===============  ====================  ============  ============
+title            str                   ""            Card title
+body             str                   ""            Card body text
+fields           dict[str, str]        {}            Key-value fields
+actions          list[dict[str, str]]  []            Action buttons
+color            str                   ""            Accent color (hex)
+===============  ====================  ============  ============
 
-   * - 属性
-     - 类型
-     - 默认
-     - 说明
-   * - ``title``
-     - ``str``
-     - ``""``
-     - 卡片标题
-   * - ``body``
-     - ``str``
-     - ``""``
-     - 卡片正文
-   * - ``fields``
-     - ``dict[str, str]``
-     - ``{}``
-     - 键值对字段
-   * - ``actions``
-     - ``list[dict[str, str]]``
-     - ``[]``
-     - 操作按钮
-   * - ``color``
-     - ``str``
-     - ``""``
-     - 强调色（十六进制）
-
-**示例：**
+**Example:**
 
 .. code-block:: python
 
    card = CardPayload(
        title="Claude Code",
-       body="正在实现功能...",
+       body="Working on feature implementation...",
        fields={
-           "状态": "运行中",
+           "Status": "Running",
            "Provider": "claude",
        },
        actions=[
-           {"text": "停止", "action": "stop"},
-           {"text": "继续", "action": "continue"},
+           {"text": "Stop", "action": "stop"},
+           {"text": "Continue", "action": "continue"},
        ],
        color="#007AFF",
    )
@@ -199,54 +183,39 @@ CardPayload
 InteractivePrompt
 -----------------
 
-用于交互式提示的数据类。
+Dataclass for interactive prompts.
 
 .. code-block:: python
 
    from unified_icc import InteractivePrompt
 
-**属性：**
+**Attributes:**
 
-.. list-table::
-   :header-rows: 1
+===============  ====================  ============  ============
+Attribute        Type                  Default       Description
+===============  ====================  ============  ============
+prompt_type      str                   (required)    Type: "question", "permission", "selection"
+title            str                   (required)    Prompt title/text
+options          list[dict[str, str]]  []            Button options
+cancel_text      str                   "Cancel"       Cancel button text
+===============  ====================  ============  ============
 
-   * - 属性
-     - 类型
-     - 默认
-     - 说明
-   * - ``prompt_type``
-     - ``str``
-     - （必填）
-     - 类型："question"、"permission"、"selection"
-   * - ``title``
-     - ``str``
-     - （必填）
-     - 提示标题/文本
-   * - ``options``
-     - ``list[dict[str, str]]``
-     - ``[]``
-     - 按钮选项
-   * - ``cancel_text``
-     - ``str``
-     - ``"取消"``
-     - 取消按钮文本
-
-**示例：**
+**Example:**
 
 .. code-block:: python
 
    prompt = InteractivePrompt(
        prompt_type="permission",
-       title="Claude 想要运行 rm -rf /？",
+       title="Claude wants to run rm -rf /?",
        options=[
-           {"text": "允许", "value": "allow"},
-           {"text": "拒绝", "value": "deny"},
+           {"text": "Allow", "value": "allow"},
+           {"text": "Deny", "value": "deny"},
        ],
-       cancel_text="取消",
+       cancel_text="Cancel",
    )
 
-实现示例
---------
+Implementation Example
+----------------------
 
 .. code-block:: python
 
@@ -269,7 +238,7 @@ InteractivePrompt
                "actions": card.actions,
                "color": card.color,
            })
-           # 存储以供后续更新
+           # Store for later updates
            cache_key = f"{channel_id}:{card.title}"
            self._sent_messages[cache_key] = msg_id
            return msg_id
@@ -294,7 +263,7 @@ InteractivePrompt
                [opt["text"] for opt in prompt.options],
            )
 
-适配器使用 ``runtime_checkable`` 来启用 isinstance 检查：
+The adapter uses ``runtime_checkable`` to enable isinstance checks:
 
 .. code-block:: python
 
@@ -304,6 +273,6 @@ InteractivePrompt
    class FrontendAdapter(Protocol):
        ...
 
-   # 检查类是否实现了该协议
+   # Check if a class implements the protocol
    if isinstance(my_adapter, FrontendAdapter):
-       print("适配器有效！")
+       print("Adapter is valid!")
