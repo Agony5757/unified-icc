@@ -9,7 +9,6 @@ require GatewayConfig (doctor, status).
 import structlog
 import os
 
-from unified_icc.expandable_quote import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 from unified_icc.providers.base import (
     AgentMessage,
     AgentProvider,
@@ -18,8 +17,7 @@ from unified_icc.providers.base import (
     SessionStartEvent,
     StatusUpdate,
 )
-from unified_icc.providers.process_detection import JS_RUNTIMES
-from unified_icc.providers.registry import ProviderRegistry, UnknownProviderError, registry
+from unified_icc.providers.registry import UnknownProviderError, registry
 
 logger = structlog.get_logger()
 
@@ -78,7 +76,7 @@ def _reset_provider() -> None:
     _registered = False
 
 
-def get_provider_for_window(window_id: str, provider_name: str | None = None) -> AgentProvider:
+def get_provider_for_window(_window_id: str, provider_name: str | None = None) -> AgentProvider:
     _ensure_registered()
     if provider_name and registry.is_valid(provider_name):
         return registry.get(provider_name)

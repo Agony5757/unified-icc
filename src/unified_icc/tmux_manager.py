@@ -150,6 +150,18 @@ class TmuxManager:
             self._reset_server()
             return None
 
+    @property
+    def own_window_id(self) -> str:
+        """Return the window ID of the pane this process is running in."""
+        import os
+        pane = os.environ.get("TMUX_PANE", "")
+        # TMUX_PANE format: pane_id like "%1"
+        return pane
+
+    def ensure_session(self) -> None:
+        """Ensure the tmux session exists, creating it if necessary."""
+        self.get_or_create_session()
+
     def get_or_create_session(self) -> libtmux.Session:
         """Get existing session or create a new one."""
         session = self.get_session()
@@ -331,6 +343,14 @@ class TmuxManager:
             return await self._capture_pane_ansi(window_id)
 
         return await self._capture_pane_plain(window_id)
+
+    async def capture_screenshot(self, window_id: str) -> bytes:
+        """Capture a screenshot of a window as PNG bytes.
+
+        Currently returns empty bytes as screenshot capture requires
+        external tools (import) that may not be available.
+        """
+        return b""
 
     async def capture_pane_scrollback(
         self, window_id: str, history: int = 200

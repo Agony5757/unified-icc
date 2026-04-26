@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 
 from unified_icc.providers._jsonl import JsonlProvider
 from unified_icc.providers.base import ProviderCapabilities

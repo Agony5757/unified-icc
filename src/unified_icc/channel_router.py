@@ -83,6 +83,28 @@ class ChannelRouter:
     def _has_window_state(self, wid: str) -> bool:
         return False
 
+    def iter_channel_bindings(self) -> list[tuple[str, str, str]]:
+        """Yield (channel_id, thread_id, window_id) tuples for all bindings."""
+        result: list[tuple[str, str, str]] = []
+        for channel_id, window_id in self._bindings.items():
+            parts = channel_id.rsplit(":", 2)
+            if len(parts) >= 3:
+                result.append((parts[0], parts[1] + ":" + parts[2] if len(parts) > 2 else "", window_id))
+            else:
+                result.append((channel_id, "", window_id))
+        return result
+
+    @property
+    def nested_bindings(self) -> dict[str, dict[str, str]]:
+        """Nested view of bindings: platform -> channel_key -> window_id."""
+        nested: dict[str, dict[str, str]] = {}
+        for channel_id, window_id in self._bindings.items():
+            parts = channel_id.split(":", 2)
+            platform = parts[0]
+            key = ":".join(parts[1:]) if len(parts) > 1 else ""
+            nested.setdefault(platform, {})[key] = window_id
+        return nested
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

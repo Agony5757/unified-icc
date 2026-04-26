@@ -94,6 +94,24 @@ class TranscriptParser:
     }
 
     @staticmethod
+    def read_file(file_path: str, last_offset: int) -> tuple[list[dict[str, Any]], int]:
+        """Read a transcript file incrementally from last_offset."""
+        with open(file_path) as f:
+            f.seek(last_offset)
+            lines = f.readlines()
+        entries = []
+        for line in lines:
+            parsed = TranscriptParser.parse_line(line)
+            if parsed:
+                entries.append(parsed)
+        return entries, last_offset + sum(len(line) for line in lines)
+
+    @staticmethod
+    def parse_history_entry(entry: dict[str, Any]) -> Any | None:
+        """Parse a single history entry dict into an AgentMessage."""
+        return TranscriptParser.parse_message(entry)
+
+    @staticmethod
     def parse_line(line: str) -> dict | None:
         """Parse a single JSONL line.
 

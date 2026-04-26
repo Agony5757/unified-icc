@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -16,13 +16,12 @@ import structlog
 from .channel_router import channel_router
 from .config import GatewayConfig, config
 from .event_types import AgentMessageEvent, HookEvent, StatusEvent, WindowChangeEvent
-from .idle_tracker import IdleTracker
 from .monitor_events import NewMessage, NewWindowEvent
-from .providers import get_provider, resolve_launch_command
+from .providers import resolve_launch_command
 from .session import session_manager
 from .session_monitor import SessionMonitor
 from .state_persistence import StatePersistence
-from .tmux_manager import tmux_manager
+from .tmux_manager import send_to_window as _send_to_window, tmux_manager
 from .window_state_store import window_store
 
 logger = structlog.get_logger()
@@ -68,30 +67,18 @@ class UnifiedICC:
         logger.info("Starting UnifiedICC gateway", session=self._config.tmux_session_name)
 
         # Connect to tmux session
-        tmux_manager.ensure_session(self._config.tmux_session_name)
+        tmux_manager.ensure_session()
         self._config.own_window_id = tmux_manager.own_window_id
 
-        # Load persisted state
-        self._persistence = StatePersistence(
-            self._config.state_file,
-            session_manager._serialize_state,
-        )
-        state = self._persistence.load()
-        if state:
-            session_manager._load_state(state)
-
         # Wire singletons
-        session_manager._wire_singletons(
-            lambda: self._persistence.schedule_save() if self._persistence else None,
-        )
+        session_manager._wire_singletons()
 
         # Start session monitor
-        self._monitor = SessionMonitor(
-            message_callback=self._on_new_message,
-            new_window_callback=self._on_new_window,
-            hook_event_callback=self._on_hook_event,
-        )
-        await self._monitor.start()
+        self._monitor = SessionMonitor()
+        self._monitor.set_message_callback(self._on_new_message)
+        self._monitor.set_new_window_callback(self._on_new_window)
+        self._monitor.set_hook_event_callback(self._on_hook_event)
+        self._monitor.start()
 
         logger.info("UnifiedICC gateway started")
 
@@ -100,7 +87,7 @@ class UnifiedICC:
         logger.info("Stopping UnifiedICC gateway")
 
         if self._monitor:
-            await self._monitor.stop()
+            self._monitor.stop()
             self._monitor = None
 
         if self._persistence:
@@ -118,11 +105,10 @@ class UnifiedICC:
     ) -> WindowInfo:
         """Create a new tmux window running an agent."""
         command = resolve_launch_command(provider, approval_mode=mode)
-        window_id = await asyncio.to_thread(
-            tmux_manager.create_window,
+        _success, _msg, _name, window_id = await tmux_manager.create_window(
             work_dir=work_dir,
             launch_command=command,
-            provider_name=provider,
+            agent_args=provider,
         )
         display_name = channel_router.get_display_name(window_id)
         return WindowInfo(
@@ -157,7 +143,7 @@ class UnifiedICC:
 
     async def send_to_window(self, window_id: str, text: str) -> None:
         """Send text input to a tmux window."""
-        await asyncio.to_thread(tmux_manager.send_to_window, window_id, text)
+        await _send_to_window(window_id, text)
 
     async def send_key(self, window_id: str, key: str) -> None:
         """Send a special key to a tmux window."""
@@ -167,11 +153,11 @@ class UnifiedICC:
 
     async def capture_pane(self, window_id: str) -> str:
         """Capture the current pane content."""
-        return await asyncio.to_thread(tmux_manager.capture_pane, window_id)
+        return await tmux_manager.capture_pane(window_id) or ""
 
     async def capture_screenshot(self, window_id: str) -> bytes:
         """Capture a screenshot of the pane as PNG bytes."""
-        return await asyncio.to_thread(tmux_manager.capture_screenshot, window_id)
+        return await tmux_manager.capture_screenshot(window_id)
 
     # ── Event subscription ─────────────────────────────────────────────
 
@@ -210,14 +196,15 @@ class UnifiedICC:
 
     # ── Internal event dispatchers ─────────────────────────────────────
 
-    def _on_new_message(self, msg: NewMessage) -> None:
+    async def _on_new_message(self, msg: NewMessage) -> None:
         channels = channel_router.resolve_channels(msg.session_id)
         # For now, use a simple approach: match window by session_id
-        from .providers.base import AgentMessage
+        from typing import cast
+        from .providers.base import AgentMessage, MessageRole, ContentType
         agent_msg = AgentMessage(
             text=msg.text,
-            role=msg.role,
-            content_type=msg.content_type,
+            role=cast(MessageRole, msg.role),
+            content_type=cast(ContentType, msg.content_type),
             is_complete=msg.is_complete,
             tool_name=msg.tool_name,
         )
@@ -229,12 +216,12 @@ class UnifiedICC:
         )
         for cb in self._message_callbacks:
             try:
-                cb(event)
+                await cb(event)
             except Exception:
                 logger.exception("Message callback error")
 
-    def _on_new_window(self, event: NewWindowEvent) -> None:
-        channels = channel_router.resolve_channels(event.window_id)
+    async def _on_new_window(self, event: NewWindowEvent) -> None:
+        channel_router.resolve_channels(event.window_id)
         change = WindowChangeEvent(
             window_id=event.window_id,
             change_type="new",
@@ -244,11 +231,11 @@ class UnifiedICC:
         )
         for cb in self._window_change_callbacks:
             try:
-                cb(change)
+                await cb(change)
             except Exception:
                 logger.exception("Window change callback error")
 
-    def _on_hook_event(self, event: Any) -> None:
+    async def _on_hook_event(self, event: Any) -> None:
         hook_evt = HookEvent(
             window_id="",
             event_type=event.event_type,
@@ -257,6 +244,6 @@ class UnifiedICC:
         )
         for cb in self._hook_callbacks:
             try:
-                cb(hook_evt)
+                await cb(hook_evt)
             except Exception:
                 logger.exception("Hook event callback error")

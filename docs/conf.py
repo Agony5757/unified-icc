@@ -1,6 +1,5 @@
 """Sphinx configuration for unified-icc documentation."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -50,7 +49,6 @@ html_theme_options = {
     "use_issues_button": True,
     "use_edit_page_button": True,
     "home_page_in_toc": True,
-    "book_backend": True,
     "show_navbar_depth": 2,
     "show_toc_level": 2,
     "navigation_depth": 3,

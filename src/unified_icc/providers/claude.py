@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import os
-from typing import Any, cast
+from typing import Any
 
 import structlog
 
@@ -11,9 +10,7 @@ from unified_icc.cc_commands import CC_BUILTINS
 from unified_icc.providers.base import UUID_RE
 from unified_icc.providers.base import (
     AgentMessage,
-    ContentType,
     DiscoveredCommand,
-    MessageRole,
     ProviderCapabilities,
     SessionStartEvent,
     StatusUpdate,
@@ -89,14 +86,14 @@ class ClaudeProvider:
 
     def read_transcript_file(self, file_path: str, last_offset: int) -> tuple[list[dict[str, Any]], int]:
         from unified_icc.transcript_parser import TranscriptParser
-        return TranscriptParser.read_file(file_path, last_offset)
+        return TranscriptParser.read_file(file_path, last_offset)  # type: ignore[return-value]
 
     def parse_transcript_entries(
         self, entries: list[dict[str, Any]], pending_tools: dict[str, Any],
         cwd: str | None = None,
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         from unified_icc.transcript_parser import TranscriptParser
-        return TranscriptParser.parse_entries(entries, pending_tools, cwd=cwd)
+        return TranscriptParser.parse_entries(entries, pending_tools, cwd=cwd)  # type: ignore[return-value]
 
     def parse_terminal_status(self, pane_text: str, *, pane_title: str = "") -> StatusUpdate | None:
         content = extract_interactive_content(pane_text)
@@ -125,30 +122,29 @@ class ClaudeProvider:
         from unified_icc.transcript_parser import TranscriptParser
         return TranscriptParser.parse_history_entry(entry)
 
-    def discover_transcript(self, cwd: str, window_key: str, *, max_age: float | None = None) -> SessionStartEvent | None:
+    def discover_transcript(self, cwd: str, window_key: str, *, max_age: float | None = None) -> SessionStartEvent | None:  # noqa: ARG002
         return None
 
-    def requires_pane_title_for_detection(self, pane_current_command: str) -> bool:
+    def requires_pane_title_for_detection(self, pane_current_command: str) -> bool:  # noqa: ARG002
         return False
 
-    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:
+    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:  # noqa: ARG002
         return False
 
-    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
+    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:  # noqa: ARG002
         return [DiscoveredCommand(name=name, description=desc, source="builtin") for name, desc in CC_BUILTINS.items()]
 
-    def build_status_snapshot(self, transcript_path: str, *, display_name: str = "", session_id: str = "", cwd: str = "") -> str | None:
+    def build_status_snapshot(self, transcript_path: str, *, display_name: str = "", session_id: str = "", cwd: str = "") -> str | None:  # noqa: ARG002
         return None
 
-    def has_output_since(self, transcript_path: str, offset: int) -> bool:
+    def has_output_since(self, transcript_path: str, offset: int) -> bool:  # noqa: ARG002
         return False
 
-    async def scrape_current_mode(self, window_id: str) -> str | None:
+    async def scrape_current_mode(self, window_id: str) -> str | None:  # noqa: ARG002
         return None
 
     async def seed_task_state(self, window_id: str, session_id: str, transcript_path: str) -> None:
         from unified_icc.claude_task_state import claude_task_state
-        from unified_icc.utils import read_session_metadata_from_jsonl
         entries_data = self.read_transcript_file(transcript_path, 0)[0]
         claude_task_state.rebuild_from_entries(window_id, session_id, entries_data)
 

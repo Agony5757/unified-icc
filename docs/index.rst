@@ -36,6 +36,11 @@ troubleshooting
 contributing
 ```
 
+## Languages / 语言
+
+- [English](index) — current language
+- [中文](zh/index) — Chinese translation
+
 ## Quick Example
 
 ```python

@@ -128,11 +128,11 @@ class SessionManager:
 
     # Backward-compat properties for routing data (owned by thread_router)
     @property
-    def channel_bindings(self) -> dict[int, dict[int, str]]:
-        return channel_router.channel_bindings
+    def channel_bindings(self) -> dict[str, dict[str, str]]:
+        return channel_router.nested_bindings
 
     @property
-    def group_chat_ids(self) -> dict[str, int]:
+    def group_chat_ids(self) -> dict[str, str]:
         return channel_router.group_chat_ids
 
     @property
@@ -204,7 +204,7 @@ class SessionManager:
                 needs_migration = True
                 break
         if not needs_migration:
-            for bindings in channel_router.channel_bindings.values():
+            for bindings in channel_router.nested_bindings.values():
                 for wid in bindings.values():
                     if not self._is_window_id(wid) and not is_foreign_window(wid):
                         needs_migration = True
@@ -243,7 +243,7 @@ class SessionManager:
         changed = _resolve(
             live,
             self.window_states,
-            channel_router.channel_bindings,
+            channel_router.nested_bindings,
             user_preferences.user_window_offsets,
             channel_router.window_display_names,
         )
@@ -306,7 +306,7 @@ class SessionManager:
         """
         # Collect window_ids that are "in use" (bound or have window_states)
         in_use = set(self.window_states.keys())
-        for bindings in channel_router.channel_bindings.values():
+        for bindings in channel_router.nested_bindings.values():
             in_use.update(bindings.values())
 
         # Prune window_display_names for dead windows not in use and not live
@@ -318,7 +318,7 @@ class SessionManager:
 
         # Collect all bound thread keys "user_id:thread_id"
         bound_keys: set[str] = set()
-        for user_id, bindings in channel_router.channel_bindings.items():
+        for user_id, bindings in channel_router.nested_bindings.items():
             for thread_id in bindings:
                 bound_keys.add(f"{user_id}:{thread_id}")
 
@@ -400,7 +400,7 @@ class SessionManager:
         bound_window_ids: set[str] = set()
         total_bindings = 0
         live_binding_count = 0
-        for _uid, bindings in channel_router.channel_bindings.items():
+        for _uid, bindings in channel_router.nested_bindings.items():
             for _tid, wid in bindings.items():
                 total_bindings += 1
                 bound_window_ids.add(wid)
@@ -410,7 +410,7 @@ class SessionManager:
         session_map_wids = self._get_session_map_window_ids()
 
         # 1. Ghost bindings (thread → dead window) — fixable (close topic)
-        for uid, bindings in channel_router.channel_bindings.items():
+        for uid, bindings in channel_router.nested_bindings.items():
             for tid, wid in bindings.items():
                 if wid not in live_window_ids:
                     display = channel_router.get_display_name(wid)
@@ -437,7 +437,7 @@ class SessionManager:
 
         # 3. Orphaned group_chat_ids
         bound_keys: set[str] = set()
-        for user_id, bindings in channel_router.channel_bindings.items():
+        for user_id, bindings in channel_router.nested_bindings.items():
             for thread_id in bindings:
                 bound_keys.add(f"{user_id}:{thread_id}")
         for key in channel_router.group_chat_ids:
@@ -517,7 +517,7 @@ class SessionManager:
         """
         session_map_wids = self._get_session_map_window_ids()
         bound_window_ids: set[str] = set()
-        for bindings in channel_router.channel_bindings.values():
+        for bindings in channel_router.nested_bindings.values():
             bound_window_ids.update(bindings.values())
 
         stale = [

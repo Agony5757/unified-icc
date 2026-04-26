@@ -37,9 +37,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: |
-          uv sync
-          uv pip install sphinx sphinx-book-theme myst-parser sphinx-autodoc-typehints
+        run: uv sync --extra docs
 
       - name: Build documentation
         run: |

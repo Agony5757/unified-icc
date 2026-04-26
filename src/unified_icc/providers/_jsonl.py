@@ -135,7 +135,7 @@ class JsonlProvider:
     def make_launch_args(
         self,
         resume_id: str | None = None,
-        use_continue: bool = False,
+        use_continue: bool = False,  # noqa: ARG002
     ) -> str:
         if resume_id:
             if not RESUME_ID_RE.match(resume_id):
@@ -143,7 +143,7 @@ class JsonlProvider:
             return f"--resume {resume_id}"
         return ""
 
-    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:
+    def parse_hook_payload(self, payload: dict[str, Any]) -> SessionStartEvent | None:  # noqa: ARG002
         return None
 
     def read_transcript_file(self, file_path: str, last_offset: int) -> tuple[list[dict[str, Any]], int]:
@@ -157,12 +157,12 @@ class JsonlProvider:
         self,
         entries: list[dict[str, Any]],
         pending_tools: dict[str, Any],
-        cwd: str | None = None,
+        cwd: str | None = None,  # noqa: ARG002
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
         return parse_jsonl_entries(entries, pending_tools)
 
     def parse_terminal_status(
-        self, pane_text: str, *, pane_title: str = ""
+        self, pane_text: str, *, pane_title: str = ""  # noqa: ARG002
     ) -> StatusUpdate | None:
         return None
 
@@ -175,41 +175,41 @@ class JsonlProvider:
     def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
         return parse_jsonl_history_entry(entry)
 
-    def requires_pane_title_for_detection(self, pane_current_command: str) -> bool:
+    def requires_pane_title_for_detection(self, pane_current_command: str) -> bool:  # noqa: ARG002
         return False
 
-    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:
+    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:  # noqa: ARG002
         return False
 
     def discover_transcript(
-        self, cwd: str, window_key: str, *, max_age: float | None = None
+        self, cwd: str, window_key: str, *, max_age: float | None = None  # noqa: ARG002
     ) -> SessionStartEvent | None:
         return None
 
-    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
+    def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:  # noqa: ARG002
         return [
             DiscoveredCommand(name=name, description=desc, source="builtin")
             for name, desc in self._BUILTINS.items()
         ]
 
-    def build_status_snapshot(
+    def build_status_snapshot(  # noqa: ARG002
         self, transcript_path: str, *, display_name: str = "",
         session_id: str = "", cwd: str = ""
     ) -> str | None:
         return None
 
-    def has_output_since(self, transcript_path: str, offset: int) -> bool:
+    def has_output_since(self, transcript_path: str, offset: int) -> bool:  # noqa: ARG002
         return False
 
-    async def scrape_current_mode(self, window_id: str) -> str | None:
+    async def scrape_current_mode(self, window_id: str) -> str | None:  # noqa: ARG002
         return None
 
-    async def seed_task_state(
+    async def seed_task_state(  # noqa: ARG002
         self, window_id: str, session_id: str, transcript_path: str
     ) -> None:
         return None
 
-    def apply_task_entries(
+    def apply_task_entries(  # noqa: ARG002
         self, window_id: str, session_id: str, entries: list[dict]
     ) -> None:
         return None

@@ -12,7 +12,6 @@ Key function: discover_cc_commands().
 import structlog
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 logger = structlog.get_logger()
 

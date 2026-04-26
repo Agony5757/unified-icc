@@ -185,7 +185,7 @@ class SessionMapSync:
 
         bound_wids = {
             wid
-            for user_bindings in channel_router.channel_bindings.values()
+            for user_bindings in channel_router.nested_bindings.values()
             for wid in user_bindings.values()
             if wid
         }
