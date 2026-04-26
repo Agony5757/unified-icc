@@ -17,12 +17,6 @@ Unified ICC 从 [ccgram](https://github.com/alexei-led/ccgram) 中提取核心�
 ## 安装
 
 ```bash
-uv pip install unified-icc
-```
-
-或从源码安装：
-
-```bash
 git clone https://github.com/Agony5757/unified-icc.git
 cd unified-icc
 uv pip install -e .
