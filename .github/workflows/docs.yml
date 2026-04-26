@@ -46,38 +46,23 @@ jobs:
         env:
           SPHINXOPTS: "-W --keep-going"
 
-      - name: Upload build artifacts
-        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_build/html
 
-  # Optional: Deploy to GitHub Pages (uncomment and configure)
-  # deploy:
-  #   name: Deploy to GitHub Pages
-  #   needs: docs
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/master'
-  #   permissions:
-  #     pages: write
-  #     id-token: write
-  #   environment:
-  #     name: github-pages
-  #     url: ${{ steps.deployment.outputs.page_url }}
-  #   steps:
-  #     - name: Setup Pages
-  #       uses: actions/configure-pages@v4
-  #
-  #     - name: Upload artifact
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         path: docs/_build/html
-  #
-  #     - name: Upload to Pages
-  #       uses: actions/upload-pages-artifact@v3
-  #       with:
-  #         path: docs/_build/html
-  #
-  #     - name: Deploy to GitHub Pages
-  #       id: deployment
-  #       uses: actions/deploy-pages@v4
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: docs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

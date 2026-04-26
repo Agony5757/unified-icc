@@ -57,14 +57,14 @@ asyncio.run(main())
 
 | 章节 | 说明 |
 |------|------|
-| [快速开始](https://unified-icc.readthedocs.io/zh/index.html) | 安装、快速开始、入门 |
-| [架构](https://unified-icc.readthedocs.io/zh/architecture.html) | 系统设计、组件、数据流 |
-| [API 参考](https://unified-icc.readthedocs.io/zh/api-reference/index.html) | 完整 API 文档 |
-| [Provider](https://unified-icc.readthedocs.io/zh/providers/index.html) | AI 助手 Provider 支持 |
-| [事件](https://unified-icc.readthedocs.io/zh/events/index.html) | 事件系统和处理器 |
-| [配置](https://unified-icc.readthedocs.io/zh/configuration.html) | 环境变量和配置项 |
-| [故障排除](https://unified-icc.readthedocs.io/zh/troubleshooting.html) | 常见问题和解决方案 |
-| [贡献指南](https://unified-icc.readthedocs.io/zh/contributing.html) | 开发指南 |
+| [快速开始](https://agony5757.github.io/unified-icc/zh/index.html) | 安装、快速开始、入门 |
+| [架构](https://agony5757.github.io/unified-icc/zh/architecture.html) | 系统设计、组件、数据流 |
+| [API 参考](https://agony5757.github.io/unified-icc/zh/api-reference/index.html) | 完整 API 文档 |
+| [Provider](https://agony5757.github.io/unified-icc/zh/providers/index.html) | AI 助手 Provider 支持 |
+| [事件](https://agony5757.github.io/unified-icc/zh/events/index.html) | 事件系统和处理器 |
+| [配置](https://agony5757.github.io/unified-icc/zh/configuration.html) | 环境变量和配置项 |
+| [故障排除](https://agony5757.github.io/unified-icc/zh/troubleshooting.html) | 常见问题和解决方案 |
+| [贡献指南](https://agony5757.github.io/unified-icc/zh/contributing.html) | 开发指南 |
 
 ## 架构
 
@@ -123,7 +123,7 @@ TMUX_SESSION_NAME=cclark
 MONITOR_POLL_INTERVAL=1.0
 ```
 
-所有配置项详见[配置参考](https://unified-icc.readthedocs.io/zh/configuration.html)。
+所有配置项详见[配置参考](https://agony5757.github.io/unified-icc/zh/configuration.html)。
 
 ## 设计文档
 
