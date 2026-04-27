@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Agony5757", email = "chenzhaoyun94@gmail.com" },
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
     "libtmux>=0.50.0",
@@ -17,7 +17,12 @@ dependencies = [
     "pathspec>=0.12",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
+    "typer[all]>=0.15.0",
+    "rich>=13.0.0",
 ]
+
+[project.scripts]
+unified-icc = "unified_icc.cli.main:app"
 
 [project.optional-dependencies]
 dev = [
@@ -56,7 +61,7 @@ select = ["E4", "E7", "E9", "F", "ARG", "G", "BLE", "SIM", "N"]
 "src/**" = ["ARG002", "PLR2004"]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
