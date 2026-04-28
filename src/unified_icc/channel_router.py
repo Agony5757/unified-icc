@@ -26,6 +26,7 @@ import asyncio
 import structlog
 
 from .state_persistence import unwired_save
+from .tmux_manager import tmux_manager as _tm
 
 logger = structlog.get_logger()
 
@@ -376,11 +377,10 @@ class ChannelRouter:
     def _kill_window(self, window_id: str) -> None:
         """Kill a tmux window. Safe to call even if the window is already gone."""
         try:
-            from . import tmux_manager
             import threading
 
             def _sync_kill() -> None:
-                asyncio.run(tmux_manager.kill_window(window_id))
+                asyncio.run(_tm.kill_window(window_id))
 
             t = threading.Thread(target=_sync_kill, daemon=True)
             t.start()
