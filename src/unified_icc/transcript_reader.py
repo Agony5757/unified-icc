@@ -332,6 +332,7 @@ class TranscriptReader:
                                 SessionInfo(
                                     session_id=session_id,
                                     file_path=file_path,
+                                    cwd=norm_pp,
                                 )
                             )
 
@@ -362,6 +363,7 @@ class TranscriptReader:
                         SessionInfo(
                             session_id=session_id,
                             file_path=jsonl_file,
+                            cwd=norm_fp,
                         )
                     )
             except OSError as e:

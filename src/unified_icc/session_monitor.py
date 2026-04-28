@@ -77,6 +77,15 @@ def _extract_session_id_from_status(status_text: str) -> str | None:
     return None
 
 
+def _normalize_path(path: str) -> str:
+    if not path:
+        return ""
+    try:
+        return str(Path(path).resolve())
+    except (OSError, RuntimeError, ValueError):
+        return path
+
+
 class SessionMonitor:
     """Monitors Claude Code sessions for new assistant messages.
 
@@ -165,6 +174,34 @@ class SessionMonitor:
                 ws.session_id = session_id
                 window_store._schedule_save()
 
+    def _link_window_for_session_info(self, session_info: SessionInfo) -> str:
+        """Resolve a window_id for a discovered session.
+
+        Prefer exact session_id matches. If the session has not been linked yet,
+        fall back to a unique created window whose cwd matches and whose
+        session_id is still empty.
+        """
+        wid = window_store.find_window_by_session(session_info.session_id) or ""
+        if wid:
+            return wid
+
+        target_cwd = _normalize_path(session_info.cwd)
+        if not target_cwd:
+            return ""
+
+        candidates: list[str] = []
+        for window_id in window_store.get_created_windows():
+            state = window_store.get_window_state(window_id)
+            if state.session_id:
+                continue
+            if _normalize_path(state.cwd) != target_cwd:
+                continue
+            candidates.append(window_id)
+
+        if len(candidates) == 1:
+            return candidates[0]
+        return ""
+
     # Delegation properties for backward-compatible test access
     @property
     def _last_session_map(self) -> dict:
@@ -213,6 +250,7 @@ class SessionMonitor:
         """Check all sessions for new assistant messages."""
         new_messages: list[NewMessage] = []
         sid_to_wid = {v["session_id"]: wid for wid, v in current_map.items()}
+        processed_session_ids: set[str] = set()
 
         direct_sessions: list[tuple[str, Path]] = []
         fallback_session_ids: set[str] = set()
@@ -235,6 +273,7 @@ class SessionMonitor:
                     new_messages,
                     window_id=sid_to_wid.get(session_id, ""),
                 )
+                processed_session_ids.add(session_id)
             except Exception:
                 logger.exception("Error processing session %s", session_id)
 
@@ -251,10 +290,32 @@ class SessionMonitor:
                         new_messages,
                         window_id=sid_to_wid.get(session_info.session_id, ""),
                     )
+                    processed_session_ids.add(session_info.session_id)
                 except Exception:
                     logger.exception(
                         "Error processing session %s", session_info.session_id
                     )
+
+        # session_map.json can legitimately stay empty even while cclark-created
+        # windows are active. In that case, keep polling already-tracked
+        # transcript files from MonitorState so output continues to stream.
+        if not current_map and self.state.tracked_sessions:
+            for session_id, tracked in list(self.state.tracked_sessions.items()):
+                if session_id in processed_session_ids:
+                    continue
+                file_path = Path(tracked.file_path)
+                if not file_path.exists():
+                    continue
+                try:
+                    await self._process_session_file(
+                        session_id,
+                        file_path,
+                        new_messages,
+                        window_id=window_store.find_window_by_session(session_id) or "",
+                    )
+                    processed_session_ids.add(session_id)
+                except Exception:
+                    logger.exception("Error processing tracked session %s", session_id)
 
         self.state.save_if_dirty()
 
@@ -281,7 +342,7 @@ class SessionMonitor:
                     # Match by session_id (exact, non-ambiguous).
                     # CWD fallback was removed: matching by directory is unreliable when
                     # multiple sessions exist in the same project.
-                    wid = window_store.find_window_by_session(session_info.session_id) or ""
+                    wid = self._link_window_for_session_info(session_info)
 
                     # KEY GUARD: only link to windows that cclark created.
                     # This prevents the cclark dev session from being linked.

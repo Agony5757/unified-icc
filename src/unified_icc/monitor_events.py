@@ -16,6 +16,7 @@ class SessionInfo:
 
     session_id: str
     file_path: Path
+    cwd: str = ""
 
 
 @dataclass
