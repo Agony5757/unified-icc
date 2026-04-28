@@ -272,12 +272,15 @@ class TranscriptReader:
             return []
 
     async def _get_active_cwds(self) -> set[str]:
-        """Get normalized cwds of all active tmux windows."""
+        """Get normalized cwds of cclark-created tmux windows only."""
         from .tmux_manager import tmux_manager
+        from .window_state_store import window_store
 
         cwds: set[str] = set()
         windows = await tmux_manager.list_windows()
         for w in windows:
+            if not window_store.is_created_window(w.window_id):
+                continue
             try:
                 cwds.add(str(Path(w.cwd).resolve()))
             except _PathResolveError:

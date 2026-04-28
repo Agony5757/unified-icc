@@ -17,6 +17,7 @@ Re-exported from transcript_reader for backward-compatible imports.
 """
 
 import asyncio
+import re
 import structlog
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -59,6 +60,22 @@ logger = structlog.get_logger()
 
 _SessionMapError = (json.JSONDecodeError, OSError)
 
+# Regex to extract session_id from /status output.
+# Matches "Session: <uuid>" or "session id: <uuid>" (case-insensitive).
+_SESSION_ID_RE = re.compile(
+    r"(?:Session|session)[_\s]*(?:ID|id)?[:\s]+([a-zA-Z0-9_-]{8,})", re.IGNORECASE
+)
+
+
+def _extract_session_id_from_status(status_text: str) -> str | None:
+    """Extract session_id from the raw output of /status."""
+    if not status_text:
+        return None
+    match = _SESSION_ID_RE.search(status_text)
+    if match:
+        return match.group(1)
+    return None
+
 
 class SessionMonitor:
     """Monitors Claude Code sessions for new assistant messages.
@@ -86,6 +103,7 @@ class SessionMonitor:
 
         self._running = False
         self._task: asyncio.Task | None = None
+        self._fallback_scan_done = False
         self._message_callback: Callable[[NewMessage], Awaitable[None]] | None = None
         self._new_window_callback: (
             Callable[[NewWindowEvent], Awaitable[None]] | None
@@ -96,6 +114,56 @@ class SessionMonitor:
 
         self._idle_tracker = IdleTracker()
         self._transcript_reader = TranscriptReader(self.state, self._idle_tracker)
+
+    # ── Session ID active detection ────────────────────────────────────────────
+
+    async def detect_session_id(self, window_id: str) -> str | None:
+        """Actively query session_id by sending /status to the window.
+
+        Sends /status, captures pane output, extracts session_id, presses Escape
+        to dismiss the status view.
+        """
+        # Send /status command
+        ok = await tmux_manager.send_keys(window_id, "/status", enter=True, literal=True)
+        if not ok:
+            logger.warning("detect_session_id: failed to send /status to %s", window_id)
+            return None
+
+        # Wait for output to appear
+        await asyncio.sleep(0.3)
+
+        # Capture pane and extract session_id
+        pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+        session_id = _extract_session_id_from_status(pane_text or "")
+
+        # Dismiss the status view
+        await tmux_manager.send_keys(window_id, "Escape", enter=False, literal=False)
+        await asyncio.sleep(0.05)
+
+        if session_id:
+            logger.info("detect_session_id: %s → %s", window_id, session_id)
+        else:
+            logger.warning(
+                "detect_session_id: no session_id found in pane for %s", window_id
+            )
+        return session_id
+
+    async def detect_missing_session_ids(self) -> None:
+        """Query /status for all cclark-created windows that lack a session_id.
+
+        Called once at startup to populate session_ids for windows where the hook
+        did not fire or session_map.json was empty.
+        """
+        for wid in window_store.iter_window_ids():
+            if not window_store.is_created_window(wid):
+                continue
+            ws = window_store.get_window_state(wid)
+            if ws.session_id:
+                continue
+            session_id = await self.detect_session_id(wid)
+            if session_id:
+                ws.session_id = session_id
+                window_store._schedule_save()
 
     # Delegation properties for backward-compatible test access
     @property
@@ -146,8 +214,6 @@ class SessionMonitor:
         new_messages: list[NewMessage] = []
         sid_to_wid = {v["session_id"]: wid for wid, v in current_map.items()}
 
-        logger.info("check_for_updates: current_map has %d entries", len(current_map))
-
         direct_sessions: list[tuple[str, Path]] = []
         fallback_session_ids: set[str] = set()
 
@@ -194,9 +260,15 @@ class SessionMonitor:
 
         # Fallback: when session_map is empty but cclark has created windows,
         # scan filesystem for matching sessions and link them to those windows.
+        # Only runs once — repeated scans are wasteful and can cause message storms.
         # The _created_windows guard prevents the feedback-loop bug where the
         # cclark dev session gets linked to a real window.
-        if not current_map and window_store.get_created_windows():
+        if (
+            not current_map
+            and window_store.get_created_windows()
+            and not self._fallback_scan_done
+        ):
+            self._fallback_scan_done = True
             active_cwds = await self._get_active_cwds()
             if active_cwds:
                 sessions = self._scan_projects_sync(active_cwds)
@@ -205,25 +277,11 @@ class SessionMonitor:
                     len(active_cwds), len(sessions),
                 )
 
-                # Build cwd → window_id mapping from window_store
-                cwd_to_wid: dict[str, str] = {}
-                for wid in window_store.iter_window_ids():
-                    ws = window_store.get_window_state(wid)
-                    if ws.cwd:
-                        try:
-                            cwd_to_wid[str(Path(ws.cwd).resolve())] = wid
-                        except (OSError, ValueError):
-                            cwd_to_wid[ws.cwd] = wid
-
                 for session_info in sessions:
-                    # Determine window_id from transcript file's project path
+                    # Match by session_id (exact, non-ambiguous).
+                    # CWD fallback was removed: matching by directory is unreliable when
+                    # multiple sessions exist in the same project.
                     wid = window_store.find_window_by_session(session_info.session_id) or ""
-                    if not wid:
-                        # Match by project directory → cwd
-                        parts = session_info.file_path.parent.name.split("-", 2)
-                        if len(parts) >= 3:
-                            proj_path = "/" + parts[2].replace("-", "/")
-                            wid = cwd_to_wid.get(proj_path, "")
 
                     # KEY GUARD: only link to windows that cclark created.
                     # This prevents the cclark dev session from being linked.
@@ -378,6 +436,11 @@ class SessionMonitor:
         initial_map = await self._load_current_session_map()
         session_lifecycle.initialize(initial_map)
         logger.info("Session monitor: initial_map has %d entries", len(initial_map))
+
+        # Actively query session_ids for windows that don't have one yet.
+        # This runs once at startup to handle cases where the hook did not fire
+        # or session_map.json was empty.
+        await self.detect_missing_session_ids()
 
         error_streak = 0
         while self._running:
