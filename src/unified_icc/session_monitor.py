@@ -29,6 +29,7 @@ from .event_reader import read_new_events
 from .idle_tracker import IdleTracker
 from .monitor_state import MonitorState
 from .providers import get_provider_for_window, registry  # noqa: F401 (used by test patches)
+from .providers.base import StatusUpdate
 from .session_map import parse_session_map
 from .session_lifecycle import session_lifecycle
 from .tmux_manager import tmux_manager
@@ -114,9 +115,13 @@ class SessionMonitor:
         self._running = False
         self._task: asyncio.Task | None = None
         self._fallback_scan_done = False
+        self._last_status_by_window: dict[str, str] = {}
         self._last_session_id_probe: dict[str, float] = {}
         self._session_id_probe_locks: dict[str, asyncio.Lock] = {}
         self._message_callback: Callable[[NewMessage], Awaitable[None]] | None = None
+        self._status_callback: (
+            Callable[[str, StatusUpdate], Awaitable[None]] | None
+        ) = None
         self._new_window_callback: (
             Callable[[NewWindowEvent], Awaitable[None]] | None
         ) = None
@@ -280,8 +285,43 @@ class SessionMonitor:
     ) -> None:
         self._new_window_callback = callback
 
+    def set_status_callback(
+        self, callback: Callable[[str, StatusUpdate], Awaitable[None]]
+    ) -> None:
+        self._status_callback = callback
+
     def set_hook_event_callback(self, callback: Callable[..., Awaitable[None]]) -> None:
         self._hook_event_callback = callback
+
+    async def _check_terminal_statuses(self, windows: list[Any]) -> None:
+        """Detect terminal-native interactive prompts and emit deduped status events."""
+        if self._status_callback is None:
+            return
+
+        from .channel_router import channel_router
+
+        for window in windows:
+            window_id = getattr(window, "window_id", "")
+            if not window_id:
+                continue
+            if (
+                not window_store.is_created_window(window_id)
+                and not channel_router.is_window_bound(window_id)
+            ):
+                continue
+
+            ws = window_store.get_window_state(window_id)
+            provider = get_provider_for_window(window_id, ws.provider_name or None)
+            pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+            update = provider.parse_terminal_status(pane_text or "")
+            if update is None or not update.is_interactive:
+                continue
+
+            key = f"{update.ui_type or ''}\n{update.raw_text}"
+            if self._last_status_by_window.get(window_id) == key:
+                continue
+            self._last_status_by_window[window_id] = key
+            await self._status_callback(window_id, update)
 
     def record_hook_activity(self, window_id: str) -> None:
         """Record hook-based activity for a window (resets idle timers)."""
@@ -606,6 +646,7 @@ class SessionMonitor:
                 all_windows = await tmux_manager.list_windows()
                 external_windows = await tmux_manager.discover_external_sessions()
                 all_windows = all_windows + external_windows
+                await self._check_terminal_statuses(all_windows)
                 live_window_ids = {w.window_id for w in all_windows}
                 session_map_sync.prune_session_map(live_window_ids)
                 known_window_ids = set(current_map.keys())

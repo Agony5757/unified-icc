@@ -88,6 +88,7 @@ class UnifiedICC:
         self._monitor.set_message_callback(self._on_new_message)
         self._monitor.set_new_window_callback(self._on_new_window)
         self._monitor.set_hook_event_callback(self._on_hook_event)
+        self._monitor.set_status_callback(self._on_terminal_status)
         self._monitor.start()
 
         logger.info("UnifiedICC gateway started")
@@ -104,8 +105,7 @@ class UnifiedICC:
             self._monitor.stop()
             self._monitor = None
 
-        if self._persistence:
-            self._persistence.flush()
+        session_manager.flush_state()
 
         logger.info("UnifiedICC gateway stopped")
 
@@ -140,6 +140,45 @@ class UnifiedICC:
         window_store.remove_window(window_id)
         await tmux_manager.kill_window(window_id)
         logger.info("Killed window %s", window_id)
+
+    async def kill_channel_windows(self, channel_id: str) -> list[str]:
+        """Kill every managed window known to belong to a channel."""
+        window_ids: set[str] = set()
+        bound_window = channel_router.resolve_window(channel_id)
+        if bound_window:
+            window_ids.add(bound_window)
+
+        for wid, state in list(window_store.window_states.items()):
+            if state.channel_id == channel_id:
+                window_ids.add(wid)
+
+        killed: list[str] = []
+        for wid in sorted(window_ids):
+            await self.kill_window(wid)
+            killed.append(wid)
+        return killed
+
+    async def list_orphaned_agent_windows(self) -> list[WindowInfo]:
+        """List live Claude tmux windows that are not monitored by cclark state."""
+        bound_wids = channel_router.bound_window_ids()
+        state_wids = set(window_store.iter_window_ids())
+        managed_wids = bound_wids | state_wids | window_store.get_created_windows()
+        orphans: list[WindowInfo] = []
+
+        for window in await tmux_manager.list_windows():
+            if window.window_id in managed_wids:
+                continue
+            if window.pane_current_command != "claude":
+                continue
+            orphans.append(
+                WindowInfo(
+                    window_id=window.window_id,
+                    display_name=window.window_name,
+                    provider="claude",
+                    cwd=window.cwd,
+                )
+            )
+        return orphans
 
     async def list_windows(self) -> list[WindowInfo]:
         """List tmux windows created by cclark (guarded by is_created_window)."""
@@ -226,29 +265,47 @@ class UnifiedICC:
         guard works correctly.
         """
         bound_wids = self.channel_router.bound_window_ids()
-        live_window_ids = {w.window_id for w in await tmux_manager.list_windows()}
+        live_windows = await tmux_manager.list_windows()
+        live_by_id = {w.window_id: w for w in live_windows}
+        live_window_ids = set(live_by_id)
 
         for wid in list(window_store.get_created_windows()):
-            if wid not in live_window_ids or not window_store.has_window(wid):
+            if wid not in live_window_ids or (
+                not window_store.has_window(wid) and wid not in bound_wids
+            ):
                 logger.info(
                     "Startup cleanup: removing stale created-window marker %s",
                     wid,
                 )
                 window_store.remove_created_window(wid)
 
+        for wid in list(bound_wids):
+            if wid not in live_window_ids:
+                logger.info(
+                    "Startup cleanup: removing dead bound window %s from persisted state",
+                    wid,
+                )
+                self.channel_router.unbind_window(wid, kill=False)
+                window_store.remove_window(wid)
+                window_store.remove_created_window(wid)
+                continue
+
+            live = live_by_id[wid]
+            ws = window_store.get_window_state(wid)
+            if not ws.cwd:
+                ws.cwd = live.cwd
+            if not ws.window_name:
+                ws.window_name = live.window_name
+            if not ws.provider_name:
+                ws.provider_name = "claude"
+            if not ws.channel_id:
+                channel_id = self.channel_router.resolve_channel_for_window(wid)
+                if channel_id:
+                    ws.channel_id = channel_id
+            window_store.mark_window_created(wid)
+
         for wid in list(window_store.iter_window_ids()):
             if wid in bound_wids:
-                if wid not in live_window_ids:
-                    logger.info(
-                        "Startup cleanup: removing dead bound window %s from persisted state",
-                        wid,
-                    )
-                    self.channel_router.unbind_window(wid, kill=False)
-                    window_store.remove_window(wid)
-                    window_store.remove_created_window(wid)
-                    continue
-                # This window has an active binding — mark it as cclark-created
-                window_store.mark_window_created(wid)
                 continue
 
             # Orphaned: no active channel binding. Kill the tmux window and clean up.
@@ -318,3 +375,29 @@ class UnifiedICC:
                 await cb(hook_evt)
             except Exception:
                 logger.exception("Hook event callback error")
+
+    async def _on_terminal_status(self, window_id: str, update: Any) -> None:
+        ws = window_store.get_window_state(window_id)
+        channels = channel_router.resolve_channels(window_id)
+        if not channels and ws.channel_id:
+            channels = [ws.channel_id]
+
+        status_evt = StatusEvent(
+            window_id=window_id,
+            session_id=ws.session_id,
+            status=(
+                "interactive"
+                if getattr(update, "is_interactive", False)
+                else "status"
+            ),
+            display_label=(
+                getattr(update, "raw_text", "")
+                or getattr(update, "display_label", "")
+            ),
+            channel_ids=channels,
+        )
+        for cb in self._status_callbacks:
+            try:
+                await cb(status_evt)
+            except Exception:
+                logger.exception("Status callback error")
