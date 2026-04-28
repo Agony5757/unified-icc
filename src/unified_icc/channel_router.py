@@ -148,20 +148,35 @@ class ChannelRouter:
                 old_window,
                 window_id,
             )
+            # The old tmux window is now orphaned — kill it
+            if not self._reverse.get(old_window):
+                self._display_names.pop(old_window, None)
+                from .window_state_store import window_store
+                window_store.remove_created_window(old_window)
+                self._kill_window(old_window)
 
         # Evict any existing channel bound to this window
         stale_channels = list(self._reverse.get(window_id, []))
         for stale_ch in stale_channels:
             if stale_ch != channel_id:
+                # Record the window before removing the binding
+                stale_wid = self._bindings.get(stale_ch, window_id)
                 del self._bindings[stale_ch]
                 self._channel_meta.pop(stale_ch, None)
+                self._remove_from_reverse(stale_ch, stale_wid)
                 logger.info(
                     "Evicted stale binding: channel %s -> window %s "
                     "(replaced by channel %s)",
                     stale_ch,
-                    window_id,
+                    stale_wid,
                     channel_id,
                 )
+                # Kill the tmux window that was bound to the evicted channel
+                if not self._reverse.get(stale_wid):
+                    self._display_names.pop(stale_wid, None)
+                    from .window_state_store import window_store
+                    window_store.remove_created_window(stale_wid)
+                    self._kill_window(stale_wid)
         # Clean up the reverse list for this window
         self._reverse.pop(window_id, None)
 
@@ -186,27 +201,38 @@ class ChannelRouter:
         )
 
     def unbind(self, channel_id: str) -> None:
-        """Remove a channel binding."""
+        """Remove a channel binding and kill the associated tmux window."""
         window_id = self._bindings.pop(channel_id, None)
         if window_id is None:
             return
         self._remove_from_reverse(channel_id, window_id)
         self._channel_meta.pop(channel_id, None)
 
-        # Clean up orphaned display name if nothing references this window
+        # Clean up orphaned display name and _created_windows entry if nothing
+        # references this window
         if not self._reverse.get(window_id):
             self._display_names.pop(window_id, None)
+            # Remove from _created_windows so the fallback scan won't re-link it
+            from .window_state_store import window_store
+            window_store.remove_created_window(window_id)
 
         self._schedule_save()
         logger.info("Unbound channel %s (was window %s)", channel_id, window_id)
 
+        # Kill the tmux window — this session is no longer managed by any channel
+        self._kill_window(window_id)
+
     def unbind_window(self, window_id: str) -> list[str]:
-        """Remove all bindings for a window. Returns the removed channel_ids."""
+        """Remove all bindings for a window and kill the tmux window."""
         channels = self._reverse.pop(window_id, [])
         for channel_id in channels:
             self._bindings.pop(channel_id, None)
             self._channel_meta.pop(channel_id, None)
         self._display_names.pop(window_id, None)
+
+        # Remove from _created_windows so the fallback scan won't re-link it
+        from .window_state_store import window_store
+        window_store.remove_created_window(window_id)
 
         if channels:
             self._schedule_save()
@@ -215,6 +241,9 @@ class ChannelRouter:
                 window_id,
                 channels,
             )
+
+        # Kill the tmux window — this session is no longer managed
+        self._kill_window(window_id)
         return channels
 
     # ------------------------------------------------------------------
@@ -342,6 +371,18 @@ class ChannelRouter:
     # ------------------------------------------------------------------
     # Internal helpers (private)
     # ------------------------------------------------------------------
+
+    def _kill_window(self, window_id: str) -> None:
+        """Kill a tmux window. Safe to call even if the window is already gone."""
+        try:
+            from . import tmux_manager
+            import threading
+            # tmux_manager is sync; run in background thread to avoid blocking
+            t = threading.Thread(target=tmux_manager.kill_window, args=(window_id,), daemon=True)
+            t.start()
+            logger.info("Triggered tmux kill for window %s", window_id)
+        except Exception:
+            logger.exception("Failed to kill tmux window %s", window_id)
 
     def _remove_from_reverse(self, channel_id: str, window_id: str) -> None:
         """Remove a channel_id from the reverse index for a window."""

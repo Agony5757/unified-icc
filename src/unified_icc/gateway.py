@@ -53,6 +53,7 @@ class UnifiedICC:
 
     def __init__(self, gateway_config: GatewayConfig | None = None) -> None:
         self._config = gateway_config or config
+        self.channel_router = channel_router
         self._monitor: SessionMonitor | None = None
         self._persistence: StatePersistence | None = None
 
@@ -72,6 +73,12 @@ class UnifiedICC:
 
         # Wire singletons
         session_manager._wire_singletons()
+
+        # Startup cleanup: evict orphaned tmux windows with no active channel binding.
+        # This handles the case where cclark was killed while a session was active,
+        # leaving stale window_states entries. Also populate _created_windows for any
+        # window that has a channel binding (proving it was cclark-created).
+        self._startup_cleanup()
 
         # Start session monitor
         self._monitor = SessionMonitor()
@@ -121,14 +128,17 @@ class UnifiedICC:
     async def kill_window(self, window_id: str) -> None:
         """Kill a tmux window and clean up bindings."""
         channel_router.unbind_window(window_id)
+        window_store.remove_created_window(window_id)
         window_store.remove_window(window_id)
         await asyncio.to_thread(tmux_manager.kill_window, window_id)
         logger.info("Killed window %s", window_id)
 
     async def list_windows(self) -> list[WindowInfo]:
-        """List all managed windows."""
+        """List tmux windows created by cclark (guarded by is_created_window)."""
         windows = []
         for wid in window_store.iter_window_ids():
+            if not window_store.is_created_window(wid):
+                continue
             state = window_store.get_window_state(wid)
             windows.append(WindowInfo(
                 window_id=wid,
@@ -196,8 +206,43 @@ class UnifiedICC:
 
     # ── Internal event dispatchers ─────────────────────────────────────
 
+    # ── Startup cleanup ──────────────────────────────────────────────────
+
+    def _startup_cleanup(self) -> None:
+        """Kill tmux windows with no active channel binding and populate _created_windows.
+
+        On startup, window_states may contain entries for windows that were bound
+        to channels in a previous run but are no longer active. These orphaned
+        windows must be killed (or ignored). Windows that do have an active
+        channel binding must be marked as cclark-created so the fallback scan
+        guard works correctly.
+        """
+        bound_wids = self.channel_router.bound_window_ids()
+
+        for wid in list(window_store.iter_window_ids()):
+            if wid in bound_wids:
+                # This window has an active binding — mark it as cclark-created
+                window_store.mark_window_created(wid)
+                continue
+
+            # Orphaned: no active channel binding. Kill the tmux window and clean up.
+            ws = window_store.get_window_state(wid)
+            state_desc = (
+                f"cwd={ws.cwd} provider={ws.provider_name} "
+                f"session={ws.session_id[:8] if ws.session_id else 'none'}"
+            )
+            logger.info("Startup cleanup: killing orphaned window %s (%s)", wid, state_desc)
+            try:
+                tmux_manager.kill_window(wid)
+            except Exception:
+                logger.exception("Failed to kill orphaned window %s", wid)
+            window_store.remove_window(wid)
+            window_store.remove_created_window(wid)
+
     async def _on_new_message(self, msg: NewMessage) -> None:
-        channels = channel_router.resolve_channels(msg.session_id)
+        # session_id → window_id → channel_ids
+        window_id = window_store.find_window_by_session(msg.session_id) or msg.session_id
+        channels = channel_router.resolve_channels(window_id)
         # For now, use a simple approach: match window by session_id
         from typing import cast
         from .providers.base import AgentMessage, MessageRole, ContentType
@@ -236,8 +281,9 @@ class UnifiedICC:
                 logger.exception("Window change callback error")
 
     async def _on_hook_event(self, event: Any) -> None:
+        wid = window_store.find_window_by_session(event.session_id) or ""
         hook_evt = HookEvent(
-            window_id="",
+            window_id=wid,
             event_type=event.event_type,
             session_id=event.session_id,
             data=event.data,
