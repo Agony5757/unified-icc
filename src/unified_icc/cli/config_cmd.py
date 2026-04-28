@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import sys
 
 import typer
 from rich.console import Console
 
-from unified_icc.config import config, GatewayConfig
+from unified_icc.config import config
 
 console = Console()
 app = typer.Typer(help="View and modify gateway configuration.", no_args_is_help=True)

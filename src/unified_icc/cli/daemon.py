@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from unified_icc import UnifiedICC
-from unified_icc.config import config
 from unified_icc.providers import detect_provider_from_command
 
 PID_FILE = Path.home() / ".cclark" / "gateway.pid"
@@ -49,10 +48,9 @@ def write_pid() -> None:
 
 
 def remove_pid() -> None:
-    try:
+    from contextlib import suppress
+    with suppress(OSError):
         PID_FILE.unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +120,7 @@ async def _handle_session_status(session_id: str | None = None) -> list[dict[str
         try:
             pane = await tmux_manager.capture_pane(session_id)
             return [{"session_id": session_id, "output": pane or ""}]
-        except Exception:
+        except (OSError, RuntimeError):
             return [{"session_id": session_id, "output": "(unavailable)"}]
     tmux_windows = await tmux_manager.list_windows()
     return [{"session_id": w.window_id, "display_name": w.window_name} for w in tmux_windows]
@@ -174,7 +172,7 @@ async def _handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
         await writer.drain()
     except asyncio.TimeoutError:
         pass
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         sys.stderr.write(f"[daemon] client handler error {addr}: {e}\n")
     finally:
         writer.close()
@@ -213,10 +211,7 @@ async def run_daemon(*, verbose: bool = False) -> None:
         sys.exit(1)
 
     SOCKET_PATH.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        SOCKET_PATH.unlink(missing_ok=True)
-    except OSError:
-        pass
+    SOCKET_PATH.unlink(missing_ok=True)
 
     write_pid()
 
@@ -232,10 +227,7 @@ async def run_daemon(*, verbose: bool = False) -> None:
         if _gateway:
             await _gateway.stop()
         remove_pid()
-        try:
-            SOCKET_PATH.unlink(missing_ok=True)
-        except OSError:
-            pass
+        SOCKET_PATH.unlink(missing_ok=True)
         if verbose:
             sys.stderr.write("[daemon] shutdown complete.\n")
 
@@ -289,7 +281,6 @@ def start_detached() -> int | None:
 
 def wait_for_socket(timeout: float = 5.0) -> bool:
     """Wait for the socket to appear and be reachable (parent use after start_detached)."""
-    import time
 
     loop = asyncio.new_event_loop()
     try:
@@ -304,7 +295,7 @@ def wait_for_socket(timeout: float = 5.0) -> bool:
                         w.close()
                         await w.wait_closed()
                         return True
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         pass
                 await asyncio.sleep(0.05)
             return False

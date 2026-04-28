@@ -29,7 +29,7 @@ def _run_async(coro) -> Any:
 async def _async_send_command(cmd: str, **kwargs: Any) -> dict[str, Any]:
     if not SOCKET_PATH.exists():
         raise DaemonError(
-            f"Gateway daemon is not running. Start it with: unified-icc gateway start"
+            "Gateway daemon is not running. Start it with: unified-icc gateway start"
         )
 
     try:
@@ -79,7 +79,7 @@ def daemon_is_running() -> bool:
             writer.close()
             await writer.wait_closed()
             return True
-        except Exception:
+        except OSError:
             return False
 
     return _run_async(_check())

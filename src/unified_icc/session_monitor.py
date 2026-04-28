@@ -212,7 +212,7 @@ class SessionMonitor:
                     if ws.cwd:
                         try:
                             cwd_to_wid[str(Path(ws.cwd).resolve())] = wid
-                        except Exception:
+                        except (OSError, ValueError):
                             cwd_to_wid[ws.cwd] = wid
 
                 for session_info in sessions:

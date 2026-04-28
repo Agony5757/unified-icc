@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import os
 import signal
-import sys
 import time
-from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from unified_icc.cli.client import daemon_is_running, send_command
+from unified_icc.cli.client import daemon_is_running
 from unified_icc.cli.daemon import (
-    PID_FILE,
     read_pid,
     pid_is_alive,
     remove_pid,
@@ -79,10 +76,9 @@ def stop() -> None:
         time.sleep(0.1)
     else:
         console.print("[yellow]Daemon did not stop gracefully, sending SIGKILL...[/yellow]")
-        try:
+        from contextlib import suppress
+        with suppress(OSError):
             os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
 
     remove_pid()
     console.print("[green]Gateway daemon stopped.[/green]")
