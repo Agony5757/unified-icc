@@ -33,6 +33,7 @@ from .tmux_manager import tmux_manager
 from .monitor_events import NewMessage, NewWindowEvent, SessionInfo
 from .transcript_reader import TranscriptReader
 from .utils import task_done_callback
+from .window_state_store import window_store
 
 import aiofiles
 import json
@@ -141,14 +142,11 @@ class SessionMonitor:
             self._idle_tracker.record_activity(session_id)
 
     async def check_for_updates(self, current_map: dict) -> list[NewMessage]:
-        """Check all sessions for new assistant messages.
-
-        Routes sessions to _process_session_file (allowing test spying) and
-        delegates the actual I/O to TranscriptReader. Uses _get_active_cwds()
-        for fallback session discovery so tests can stub tmux calls.
-        """
+        """Check all sessions for new assistant messages."""
         new_messages: list[NewMessage] = []
         sid_to_wid = {v["session_id"]: wid for wid, v in current_map.items()}
+
+        logger.info("check_for_updates: current_map has %d entries", len(current_map))
 
         direct_sessions: list[tuple[str, Path]] = []
         fallback_session_ids: set[str] = set()
@@ -193,6 +191,72 @@ class SessionMonitor:
                     )
 
         self.state.save_if_dirty()
+
+        # Fallback: when session_map is empty but cclark has created windows,
+        # scan filesystem for matching sessions and link them to those windows.
+        # The _created_windows guard prevents the feedback-loop bug where the
+        # cclark dev session gets linked to a real window.
+        if not current_map and window_store.get_created_windows():
+            active_cwds = await self._get_active_cwds()
+            if active_cwds:
+                sessions = self._scan_projects_sync(active_cwds)
+                logger.debug(
+                    "Fallback scan: %d active_cwds, %d sessions found",
+                    len(active_cwds), len(sessions),
+                )
+
+                # Build cwd → window_id mapping from window_store
+                cwd_to_wid: dict[str, str] = {}
+                for wid in window_store.iter_window_ids():
+                    ws = window_store.get_window_state(wid)
+                    if ws.cwd:
+                        try:
+                            cwd_to_wid[str(Path(ws.cwd).resolve())] = wid
+                        except Exception:
+                            cwd_to_wid[ws.cwd] = wid
+
+                for session_info in sessions:
+                    # Determine window_id from transcript file's project path
+                    wid = window_store.find_window_by_session(session_info.session_id) or ""
+                    if not wid:
+                        # Match by project directory → cwd
+                        parts = session_info.file_path.parent.name.split("-", 2)
+                        if len(parts) >= 3:
+                            proj_path = "/" + parts[2].replace("-", "/")
+                            wid = cwd_to_wid.get(proj_path, "")
+
+                    # KEY GUARD: only link to windows that cclark created.
+                    # This prevents the cclark dev session from being linked.
+                    if wid and not window_store.is_created_window(wid):
+                        logger.debug(
+                            "Fallback: session %s matched window %s but window "
+                            "is not in _created_windows — skipping link",
+                            session_info.session_id, wid,
+                        )
+                        wid = ""
+
+                    # Record session_id → window_id in window_store
+                    if wid and session_info.session_id:
+                        ws = window_store.get_window_state(wid)
+                        if not ws.session_id:
+                            ws.session_id = session_info.session_id
+                            window_store._schedule_save()
+                            logger.info(
+                                "Linked window %s → session %s (created-window via fallback)",
+                                wid, session_info.session_id,
+                            )
+                    try:
+                        await self._process_session_file(
+                            session_info.session_id,
+                            session_info.file_path,
+                            new_messages,
+                            window_id=wid,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Error processing session %s", session_info.session_id
+                        )
+
         return new_messages
 
     async def _process_session_file(
@@ -305,12 +369,15 @@ class SessionMonitor:
     async def _monitor_loop(self) -> None:
         """Background poll loop."""
         logger.info("Session monitor started, polling every %ss", self.poll_interval)
+        logger.info("Session monitor: about to import session_map_sync")
 
         from .session_map import session_map_sync
 
+        logger.info("Session monitor loop starting")
         await self._cleanup_all_stale_sessions()
         initial_map = await self._load_current_session_map()
         session_lifecycle.initialize(initial_map)
+        logger.info("Session monitor: initial_map has %d entries", len(initial_map))
 
         error_streak = 0
         while self._running:

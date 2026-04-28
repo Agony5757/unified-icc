@@ -37,6 +37,8 @@ class WindowState:
     approval_mode: str = DEFAULT_APPROVAL_MODE
     batch_mode: str = DEFAULT_BATCH_MODE
     external: bool = False
+    channel_id: str = ""
+    """Feishu (or platform) channel_id bound to this window, for reverse routing."""
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -57,6 +59,8 @@ class WindowState:
             d["batch_mode"] = self.batch_mode
         if self.external:
             d["external"] = True
+        if self.channel_id:
+            d["channel_id"] = self.channel_id
         return d
 
     @classmethod
@@ -71,6 +75,7 @@ class WindowState:
             approval_mode=data.get("approval_mode", DEFAULT_APPROVAL_MODE),
             batch_mode=data.get("batch_mode", DEFAULT_BATCH_MODE),
             external=data.get("external", False),
+            channel_id=data.get("channel_id", ""),
         )
 
 
@@ -79,6 +84,12 @@ class WindowStateStore:
     """Per-window mode and session metadata store."""
 
     window_states: dict[str, WindowState] = field(default_factory=dict)
+    # Maps app_name → set of window_ids that cclark created via create_window().
+    # Used to guard the fallback scan: only link sessions to windows in this set,
+    # preventing the cclark dev session from being linked and causing a feedback loop.
+    _created_windows: dict[str, set[str]] = field(
+        default_factory=lambda: {"": set()}
+    )
 
     def __post_init__(self) -> None:
         self._schedule_save: Callable[[], None] = unwired_save("WindowStateStore")
@@ -86,14 +97,57 @@ class WindowStateStore:
 
     def reset(self) -> None:
         self.window_states.clear()
+        self._created_windows = {"": set()}
 
     def to_dict(self) -> dict[str, Any]:
-        return {k: v.to_dict() for k, v in self.window_states.items()}
+        return {
+            "window_states": {k: v.to_dict() for k, v in self.window_states.items()},
+            "_created_windows": {
+                name: list(wids) for name, wids in self._created_windows.items()
+            },
+        }
 
     def from_dict(self, data: dict[str, Any]) -> None:
         self.window_states = {
-            k: WindowState.from_dict(v) for k, v in data.items() if isinstance(v, dict)
+            k: WindowState.from_dict(v)
+            for k, v in data.get("window_states", data).items()
+            if isinstance(v, dict)
         }
+        raw = data.get("_created_windows", {})
+        self._created_windows = {name: set(wids) for name, wids in raw.items()}
+        self._created_windows.setdefault("", set())
+
+    # ── Created-window tracking ───────────────────────────────────────────────
+
+    def mark_window_created(self, window_id: str, app_name: str = "") -> None:
+        """Record that cclark created this window (enables fallback-scan guard)."""
+        self._created_windows.setdefault(app_name, set()).add(window_id)
+        self._schedule_save()
+        logger.debug("Marked window %s as created (app=%s)", window_id, app_name or "(default)")
+
+    def is_created_window(self, window_id: str, app_name: str = "") -> bool:
+        """Return True if cclark created this window (guards the fallback scan)."""
+        if window_id in self._created_windows.get("", set()):
+            return True
+        return window_id in self._created_windows.get(app_name, set())
+
+    def remove_created_window(self, window_id: str, app_name: str = "") -> None:
+        """Remove window from created set (called on kill/unbind)."""
+        for name, windows in list(self._created_windows.items()):
+            windows.discard(window_id)
+            if not windows:
+                del self._created_windows[name]
+        self._created_windows.setdefault("", set())
+        self._schedule_save()
+
+    def get_created_windows(self, app_name: str = "") -> set[str]:
+        """Return all window_ids marked as created (for any app or a specific app)."""
+        if app_name:
+            return set(self._created_windows.get(app_name, set()))
+        result: set[str] = set()
+        for windows in self._created_windows.values():
+            result.update(windows)
+        return result
 
     def get_window_state(self, window_id: str) -> WindowState:
         if window_id not in self.window_states:
@@ -120,6 +174,41 @@ class WindowStateStore:
     def get_session_id_for_window(self, window_id: str) -> str | None:
         state = self.window_states.get(window_id)
         return state.session_id if state and state.session_id else None
+
+    def find_window_by_session(self, session_id: str) -> str | None:
+        """Reverse lookup: find window_id for a given session_id."""
+        for wid, state in self.window_states.items():
+            if state.session_id == session_id:
+                return wid
+        return None
+
+    def set_window_channel(self, window_id: str, channel_id: str) -> None:
+        """Record the Feishu channel bound to a window (for reverse routing)."""
+        state = self.get_window_state(window_id)
+        state.channel_id = channel_id
+        self._schedule_save()
+
+    def find_channel_by_session(self, session_id: str) -> str | None:
+        """Find the Feishu channel_id for a session by looking up window_store.
+
+        Strategy:
+        1. Exact session_id match in window_states
+        2. If no session_id is set (newly created window before monitor linked it),
+           return the channel_id of the first window that has one (single-session assumption).
+        """
+        window_id = self.find_window_by_session(session_id)
+        if window_id:
+            state = self.window_states.get(window_id)
+            if state and state.channel_id:
+                return state.channel_id
+
+        # Fallback: session_id not yet linked to window (new window before monitor ran).
+        # Return channel_id of the first window that has one — valid for single-session bots.
+        if session_id:
+            for wid, state in self.window_states.items():
+                if state.channel_id:
+                    return state.channel_id
+        return None
 
     def has_window(self, window_id: str) -> bool:
         return window_id in self.window_states
