@@ -82,6 +82,9 @@ class UnifiedICC:
 
         # Start session monitor
         self._monitor = SessionMonitor()
+        from .session_monitor import set_active_monitor
+
+        set_active_monitor(self._monitor)
         self._monitor.set_message_callback(self._on_new_message)
         self._monitor.set_new_window_callback(self._on_new_window)
         self._monitor.set_hook_event_callback(self._on_hook_event)
@@ -94,6 +97,10 @@ class UnifiedICC:
         logger.info("Stopping UnifiedICC gateway")
 
         if self._monitor:
+            from .session_monitor import get_active_monitor, set_active_monitor
+
+            if get_active_monitor() is self._monitor:
+                set_active_monitor(None)  # type: ignore[arg-type]
             self._monitor.stop()
             self._monitor = None
 
@@ -111,11 +118,12 @@ class UnifiedICC:
         mode: str = "normal",
     ) -> WindowInfo:
         """Create a new tmux window running an agent."""
-        command = resolve_launch_command(provider, approval_mode=mode)
+        approval_mode = "normal" if mode == "standard" else mode
+        command = resolve_launch_command(provider, approval_mode=approval_mode)
         _success, _msg, _name, window_id = await tmux_manager.create_window(
             work_dir=work_dir,
             launch_command=command,
-            agent_args=provider,
+            agent_args="",
         )
         display_name = channel_router.get_display_name(window_id)
         return WindowInfo(
@@ -127,10 +135,10 @@ class UnifiedICC:
 
     async def kill_window(self, window_id: str) -> None:
         """Kill a tmux window and clean up bindings."""
-        channel_router.unbind_window(window_id)
+        channel_router.unbind_window(window_id, kill=False)
         window_store.remove_created_window(window_id)
         window_store.remove_window(window_id)
-        await asyncio.to_thread(tmux_manager.kill_window, window_id)
+        await tmux_manager.kill_window(window_id)
         logger.info("Killed window %s", window_id)
 
     async def list_windows(self) -> list[WindowInfo]:
@@ -218,9 +226,27 @@ class UnifiedICC:
         guard works correctly.
         """
         bound_wids = self.channel_router.bound_window_ids()
+        live_window_ids = {w.window_id for w in await tmux_manager.list_windows()}
+
+        for wid in list(window_store.get_created_windows()):
+            if wid not in live_window_ids or not window_store.has_window(wid):
+                logger.info(
+                    "Startup cleanup: removing stale created-window marker %s",
+                    wid,
+                )
+                window_store.remove_created_window(wid)
 
         for wid in list(window_store.iter_window_ids()):
             if wid in bound_wids:
+                if wid not in live_window_ids:
+                    logger.info(
+                        "Startup cleanup: removing dead bound window %s from persisted state",
+                        wid,
+                    )
+                    self.channel_router.unbind_window(wid, kill=False)
+                    window_store.remove_window(wid)
+                    window_store.remove_created_window(wid)
+                    continue
                 # This window has an active binding — mark it as cclark-created
                 window_store.mark_window_created(wid)
                 continue
@@ -241,9 +267,8 @@ class UnifiedICC:
 
     async def _on_new_message(self, msg: NewMessage) -> None:
         # session_id → window_id → channel_ids
-        window_id = window_store.find_window_by_session(msg.session_id) or msg.session_id
+        window_id = window_store.find_window_by_session(msg.session_id) or ""
         channels = channel_router.resolve_channels(window_id)
-        # For now, use a simple approach: match window by session_id
         from typing import cast
         from .providers.base import AgentMessage, MessageRole, ContentType
         agent_msg = AgentMessage(
@@ -254,7 +279,7 @@ class UnifiedICC:
             tool_name=msg.tool_name,
         )
         event = AgentMessageEvent(
-            window_id="",
+            window_id=window_id,
             session_id=msg.session_id,
             messages=[agent_msg],
             channel_ids=channels,

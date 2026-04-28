@@ -224,7 +224,7 @@ class ChannelRouter:
         # Kill the tmux window — this session is no longer managed by any channel
         self._kill_window(window_id)
 
-    def unbind_window(self, window_id: str) -> list[str]:
+    def unbind_window(self, window_id: str, *, kill: bool = True) -> list[str]:
         """Remove all bindings for a window and kill the tmux window."""
         channels = self._reverse.pop(window_id, [])
         for channel_id in channels:
@@ -244,8 +244,10 @@ class ChannelRouter:
                 channels,
             )
 
-        # Kill the tmux window — this session is no longer managed
-        self._kill_window(window_id)
+        # Kill the tmux window when the router owns the lifecycle. Callers that
+        # perform their own awaited kill can disable this to avoid duplicate kills.
+        if kill:
+            self._kill_window(window_id)
         return channels
 
     # ------------------------------------------------------------------

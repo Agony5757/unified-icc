@@ -19,6 +19,7 @@ Re-exported from transcript_reader for backward-compatible imports.
 import asyncio
 import re
 import structlog
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -113,6 +114,8 @@ class SessionMonitor:
         self._running = False
         self._task: asyncio.Task | None = None
         self._fallback_scan_done = False
+        self._last_session_id_probe: dict[str, float] = {}
+        self._session_id_probe_locks: dict[str, asyncio.Lock] = {}
         self._message_callback: Callable[[NewMessage], Awaitable[None]] | None = None
         self._new_window_callback: (
             Callable[[NewWindowEvent], Awaitable[None]] | None
@@ -132,24 +135,59 @@ class SessionMonitor:
         Sends /status, captures pane output, extracts session_id, presses Escape
         to dismiss the status view.
         """
-        # Send /status command
-        ok = await tmux_manager.send_keys(window_id, "/status", enter=True, literal=True)
+        lock = self._session_id_probe_locks.setdefault(window_id, asyncio.Lock())
+        async with lock:
+            existing = window_store.get_session_id_for_window(window_id)
+            if existing:
+                return existing
+            return await self._detect_session_id_unlocked(window_id)
+
+    async def _detect_session_id_unlocked(self, window_id: str) -> str | None:
+        """Implementation for detect_session_id; caller must hold the window lock."""
+        # Send /status without the normal TUI workarounds. The regular literal
+        # path probes vim insert mode by typing "i", which can pollute Claude's
+        # input box when the pane is a Claude TUI rather than vim.
+        await tmux_manager.send_keys(
+            window_id, "C-u", enter=False, literal=False, raw=True
+        )
+        ok = await tmux_manager.send_keys(
+            window_id, "/status", enter=False, literal=True, raw=True
+        )
         if not ok:
             logger.warning("detect_session_id: failed to send /status to %s", window_id)
             return None
+        await asyncio.sleep(0.5)
+        await tmux_manager.send_keys(
+            window_id, "Enter", enter=False, literal=False, raw=True
+        )
 
-        # Wait for output to appear
-        await asyncio.sleep(0.3)
-
-        # Capture pane and extract session_id
-        pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
-        session_id = _extract_session_id_from_status(pane_text or "")
+        session_id = None
+        for _ in range(10):
+            await asyncio.sleep(0.2)
+            pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+            session_id = _extract_session_id_from_status(pane_text or "")
+            if session_id:
+                break
 
         # Dismiss the status view
-        await tmux_manager.send_keys(window_id, "Escape", enter=False, literal=False)
+        await tmux_manager.send_keys(
+            window_id, "Escape", enter=False, literal=False, raw=True
+        )
+        await asyncio.sleep(0.2)
+        await tmux_manager.send_keys(
+            window_id, "Escape", enter=False, literal=False, raw=True
+        )
+        await tmux_manager.send_keys(
+            window_id, "C-u", enter=False, literal=False, raw=True
+        )
         await asyncio.sleep(0.05)
 
         if session_id:
+            if window_store.has_window(window_id):
+                ws = window_store.get_window_state(window_id)
+                if not ws.session_id:
+                    ws.session_id = session_id
+                    window_store._schedule_save()
             logger.info("detect_session_id: %s → %s", window_id, session_id)
         else:
             logger.warning(
@@ -157,7 +195,7 @@ class SessionMonitor:
             )
         return session_id
 
-    async def detect_missing_session_ids(self) -> None:
+    async def detect_missing_session_ids(self, *, min_interval: float = 5.0) -> None:
         """Query /status for all cclark-created windows that lack a session_id.
 
         Called once at startup to populate session_ids for windows where the hook
@@ -169,6 +207,11 @@ class SessionMonitor:
             ws = window_store.get_window_state(wid)
             if ws.session_id:
                 continue
+            now = time.monotonic()
+            last_probe = self._last_session_id_probe.get(wid, 0.0)
+            if min_interval > 0 and now - last_probe < min_interval:
+                continue
+            self._last_session_id_probe[wid] = now
             session_id = await self.detect_session_id(wid)
             if session_id:
                 ws.session_id = session_id
@@ -303,6 +346,13 @@ class SessionMonitor:
             for session_id, tracked in list(self.state.tracked_sessions.items()):
                 if session_id in processed_session_ids:
                     continue
+                bound_window_id = window_store.find_window_by_session(session_id) or ""
+                if not bound_window_id:
+                    logger.debug(
+                        "Skipping unbound tracked session while session_map is empty: %s",
+                        session_id,
+                    )
+                    continue
                 file_path = Path(tracked.file_path)
                 if not file_path.exists():
                     continue
@@ -311,11 +361,45 @@ class SessionMonitor:
                         session_id,
                         file_path,
                         new_messages,
-                        window_id=window_store.find_window_by_session(session_id) or "",
+                        window_id=bound_window_id,
                     )
                     processed_session_ids.add(session_id)
                 except Exception:
                     logger.exception("Error processing tracked session %s", session_id)
+
+        if not current_map:
+            bound_session_ids = {
+                state.session_id
+                for wid in window_store.get_created_windows()
+                for state in [window_store.get_window_state(wid)]
+                if state.session_id
+            }
+            missing_bound_session_ids = bound_session_ids - processed_session_ids
+            if missing_bound_session_ids:
+                active_cwds = await self._get_active_cwds()
+                sessions = self._scan_projects_sync(active_cwds) if active_cwds else []
+                for session_info in sessions:
+                    if session_info.session_id not in missing_bound_session_ids:
+                        continue
+                    bound_window_id = (
+                        window_store.find_window_by_session(session_info.session_id)
+                        or ""
+                    )
+                    if not bound_window_id:
+                        continue
+                    try:
+                        await self._process_session_file(
+                            session_info.session_id,
+                            session_info.file_path,
+                            new_messages,
+                            window_id=bound_window_id,
+                        )
+                        processed_session_ids.add(session_info.session_id)
+                    except Exception:
+                        logger.exception(
+                            "Error processing bound session %s",
+                            session_info.session_id,
+                        )
 
         self.state.save_if_dirty()
 
@@ -364,6 +448,13 @@ class SessionMonitor:
                                 "Linked window %s → session %s (created-window via fallback)",
                                 wid, session_info.session_id,
                             )
+                    if not wid:
+                        logger.debug(
+                            "Skipping unbound fallback session %s from %s",
+                            session_info.session_id,
+                            session_info.file_path,
+                        )
+                        continue
                     try:
                         await self._process_session_file(
                             session_info.session_id,
@@ -510,6 +601,7 @@ class SessionMonitor:
                 await session_map_sync.load_session_map()
 
                 current_map = await self._detect_and_cleanup_changes()
+                await self.detect_missing_session_ids()
 
                 all_windows = await tmux_manager.list_windows()
                 external_windows = await tmux_manager.discover_external_sessions()
@@ -598,7 +690,7 @@ class SessionMonitor:
 _active_monitor: SessionMonitor | None = None
 
 
-def set_active_monitor(monitor: SessionMonitor) -> None:
+def set_active_monitor(monitor: SessionMonitor | None) -> None:
     """Set the active SessionMonitor instance (called by bot.py post_init)."""
     global _active_monitor  # noqa: PLW0603
     _active_monitor = monitor

@@ -1,0 +1,250 @@
+import pytest
+
+from unified_icc.gateway import UnifiedICC
+from unified_icc.monitor_events import NewMessage
+from unified_icc.session_monitor import SessionMonitor, get_active_monitor
+from unified_icc.tmux_manager import TmuxWindow, tmux_manager
+from unified_icc.window_state_store import window_store
+
+
+@pytest.mark.asyncio
+async def test_on_new_message_does_not_route_unknown_session() -> None:
+    window_store.reset()
+    try:
+        gateway = UnifiedICC()
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        seen = []
+
+        async def callback(event):
+            seen.append(event)
+
+        gateway.on_message(callback)
+
+        await gateway._on_new_message(
+            NewMessage(
+                session_id="sid-unknown",
+                text="hello",
+                is_complete=True,
+            )
+        )
+
+        assert len(seen) == 1
+        assert seen[0].window_id == ""
+        assert seen[0].channel_ids == []
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_on_new_message_routes_known_session_to_bound_window() -> None:
+    window_store.reset()
+    try:
+        gateway = UnifiedICC()
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        gateway.channel_router.bind("feishu:chat-1", "@2")
+        ws = window_store.get_window_state("@2")
+        ws.session_id = "sid-known"
+        ws.channel_id = "feishu:chat-1"
+
+        seen = []
+
+        async def callback(event):
+            seen.append(event)
+
+        gateway.on_message(callback)
+
+        await gateway._on_new_message(
+            NewMessage(
+                session_id="sid-known",
+                text="hello",
+                is_complete=True,
+            )
+        )
+
+        assert len(seen) == 1
+        assert seen[0].window_id == "@2"
+        assert seen[0].channel_ids == ["feishu:chat-1"]
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_startup_cleanup_removes_dead_bound_windows(monkeypatch) -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        gateway.channel_router.bind("feishu:chat-1", "@2")
+        ws = window_store.get_window_state("@2")
+        ws.channel_id = "feishu:chat-1"
+        ws.cwd = "/tmp/project"
+
+        async def fake_list_windows():
+            return [
+                TmuxWindow(
+                    window_id="@9",
+                    window_name="live",
+                    cwd="/tmp/other",
+                )
+            ]
+
+        monkeypatch.setattr(tmux_manager, "list_windows", fake_list_windows)
+
+        await gateway._startup_cleanup()
+
+        assert gateway.channel_router.resolve_window("feishu:chat-1") is None
+        assert not window_store.has_window("@2")
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_startup_cleanup_prunes_stale_created_window_markers(monkeypatch) -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        window_store.mark_window_created("@3")
+
+        async def fake_list_windows():
+            return [
+                TmuxWindow(
+                    window_id="@9",
+                    window_name="live",
+                    cwd="/tmp/other",
+                )
+            ]
+
+        monkeypatch.setattr(tmux_manager, "list_windows", fake_list_windows)
+
+        await gateway._startup_cleanup()
+
+        assert not window_store.is_created_window("@3")
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_kill_window_awaits_tmux_kill(monkeypatch) -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        gateway.channel_router.bind("feishu:chat-1", "@2")
+        window_store.mark_window_created("@2")
+        ws = window_store.get_window_state("@2")
+        ws.channel_id = "feishu:chat-1"
+
+        killed = []
+
+        async def fake_kill_window(window_id: str) -> bool:
+            killed.append(window_id)
+            return True
+
+        monkeypatch.setattr(tmux_manager, "kill_window", fake_kill_window)
+
+        await gateway.kill_window("@2")
+
+        assert killed == ["@2"]
+        assert gateway.channel_router.resolve_window("feishu:chat-1") is None
+        assert gateway.channel_router.resolve_channels("@2") == []
+        assert not window_store.has_window("@2")
+        assert not window_store.is_created_window("@2")
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_create_window_uses_launch_command_without_provider_duplication(
+    monkeypatch,
+) -> None:
+    gateway = UnifiedICC()
+
+    captured = {}
+
+    async def fake_create_window(**kwargs):
+        captured.update(kwargs)
+        return (True, "ok", "proj", "@7")
+
+    monkeypatch.setattr(tmux_manager, "create_window", fake_create_window)
+
+    window = await gateway.create_window(
+        "/tmp/project",
+        provider="claude",
+        mode="standard",
+    )
+
+    assert window.window_id == "@7"
+    assert captured["agent_args"] == ""
+    assert captured["launch_command"] == "claude --permission-mode default"
+
+
+@pytest.mark.asyncio
+async def test_gateway_start_registers_active_monitor(monkeypatch) -> None:
+    gateway = UnifiedICC()
+
+    monkeypatch.setattr(tmux_manager, "ensure_session", lambda: None)
+
+    async def fake_startup_cleanup() -> None:
+        return None
+
+    monkeypatch.setattr(gateway, "_startup_cleanup", fake_startup_cleanup)
+
+    started = {"called": False, "stopped": False}
+
+    def fake_monitor_start(self) -> None:
+        started["called"] = True
+
+    def fake_monitor_stop(self) -> None:
+        started["stopped"] = True
+
+    monkeypatch.setattr(SessionMonitor, "start", fake_monitor_start)
+    monkeypatch.setattr(SessionMonitor, "stop", fake_monitor_stop)
+
+    await gateway.start()
+
+    assert gateway._monitor is not None
+    assert get_active_monitor() is gateway._monitor
+    assert started["called"] is True
+
+    await gateway.stop()
+    assert started["stopped"] is True
+    assert get_active_monitor() is None

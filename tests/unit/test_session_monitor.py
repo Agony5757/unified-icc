@@ -5,6 +5,7 @@ import pytest
 from unified_icc.monitor_events import SessionInfo
 from unified_icc.monitor_state import TrackedSession
 from unified_icc.session_monitor import SessionMonitor
+from unified_icc.tmux_manager import tmux_manager
 from unified_icc.window_state_store import window_store
 
 
@@ -17,6 +18,41 @@ class _IdleTrackerStub:
 
     def clear_session(self, _session_id: str) -> None:
         return None
+
+
+@pytest.mark.asyncio
+async def test_detect_session_id_uses_raw_status_probe(monkeypatch, tmp_path: Path) -> None:
+    monitor = SessionMonitor(state_file=tmp_path / "monitor_state.json")
+    calls = []
+
+    async def fake_send_keys(
+        window_id: str,
+        text: str,
+        enter: bool = True,
+        literal: bool = True,
+        *,
+        raw: bool = False,
+    ) -> bool:
+        calls.append((window_id, text, enter, literal, raw))
+        return True
+
+    async def fake_capture_pane(window_id: str, with_ansi: bool = True) -> str:
+        assert window_id == "@2"
+        assert with_ansi is False
+        return "Session ID: sid-12345678"
+
+    monkeypatch.setattr(tmux_manager, "send_keys", fake_send_keys)
+    monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
+
+    assert await monitor.detect_session_id("@2") == "sid-12345678"
+    assert calls == [
+        ("@2", "C-u", False, False, True),
+        ("@2", "/status", False, True, True),
+        ("@2", "Enter", False, False, True),
+        ("@2", "Escape", False, False, True),
+        ("@2", "Escape", False, False, True),
+        ("@2", "C-u", False, False, True),
+    ]
 
 
 def test_link_window_for_session_info_matches_unique_created_window_by_cwd(tmp_path: Path) -> None:
@@ -102,5 +138,141 @@ async def test_check_for_updates_processes_tracked_sessions_when_current_map_emp
 
         assert result == []
         assert calls == [("sid-123", "@2")]
+    finally:
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_skips_unbound_tracked_sessions_when_current_map_empty(
+    tmp_path: Path,
+) -> None:
+    window_store.reset()
+    try:
+        monitor = SessionMonitor(state_file=tmp_path / "monitor_state.json")
+        monitor._idle_tracker = _IdleTrackerStub()
+        transcript = tmp_path / "sid-orphan.jsonl"
+        transcript.write_text("")
+        monitor.state.update_session(
+            TrackedSession(
+                session_id="sid-orphan",
+                file_path=str(transcript),
+                last_byte_offset=0,
+            )
+        )
+        monitor._fallback_scan_done = True
+
+        calls: list[tuple[str, str]] = []
+
+        async def fake_process_session_file(
+            session_id: str,
+            file_path: Path,
+            new_messages: list,
+            window_id: str = "",
+        ) -> None:
+            calls.append((session_id, window_id))
+
+        monitor._process_session_file = fake_process_session_file  # type: ignore[method-assign]
+
+        result = await monitor.check_for_updates({})
+
+        assert result == []
+        assert calls == []
+    finally:
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_tracks_bound_session_when_current_map_empty(
+    tmp_path: Path,
+) -> None:
+    window_store.reset()
+    try:
+        window_store.mark_window_created("@2")
+        ws = window_store.get_window_state("@2")
+        ws.cwd = "/home/agony/projects/claude-code-lark"
+        ws.session_id = "sid-bound"
+
+        monitor = SessionMonitor(state_file=tmp_path / "monitor_state.json")
+        monitor._idle_tracker = _IdleTrackerStub()
+        transcript = tmp_path / "sid-bound.jsonl"
+        transcript.write_text("")
+
+        async def fake_get_active_cwds() -> set[str]:
+            return {"/home/agony/projects/claude-code-lark"}
+
+        monitor._get_active_cwds = fake_get_active_cwds  # type: ignore[method-assign]
+        monitor._scan_projects_sync = lambda _active_cwds: [  # type: ignore[method-assign]
+            SessionInfo(
+                session_id="sid-bound",
+                file_path=transcript,
+                cwd="/home/agony/projects/claude-code-lark",
+            )
+        ]
+        monitor._fallback_scan_done = True
+
+        calls: list[tuple[str, str]] = []
+
+        async def fake_process_session_file(
+            session_id: str,
+            file_path: Path,
+            new_messages: list,
+            window_id: str = "",
+        ) -> None:
+            calls.append((session_id, window_id))
+
+        monitor._process_session_file = fake_process_session_file  # type: ignore[method-assign]
+
+        result = await monitor.check_for_updates({})
+
+        assert result == []
+        assert calls == [("sid-bound", "@2")]
+    finally:
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_skips_unbound_sessions_during_fallback_scan(
+    tmp_path: Path,
+) -> None:
+    window_store.reset()
+    try:
+        window_store.mark_window_created("@2")
+        ws = window_store.get_window_state("@2")
+        ws.cwd = "/home/agony/projects/claude-code-lark"
+
+        monitor = SessionMonitor(state_file=tmp_path / "monitor_state.json")
+        monitor._idle_tracker = _IdleTrackerStub()
+
+        transcript = tmp_path / "sid-unbound.jsonl"
+        transcript.write_text("")
+
+        async def fake_get_active_cwds() -> set[str]:
+            return {"/home/agony/projects/claude-code-lark"}
+
+        monitor._get_active_cwds = fake_get_active_cwds  # type: ignore[method-assign]
+        monitor._scan_projects_sync = lambda _active_cwds: [  # type: ignore[method-assign]
+            SessionInfo(
+                session_id="sid-unbound",
+                file_path=transcript,
+                cwd="/some/other/project",
+            )
+        ]
+
+        calls: list[tuple[str, str]] = []
+
+        async def fake_process_session_file(
+            session_id: str,
+            file_path: Path,
+            new_messages: list,
+            window_id: str = "",
+        ) -> None:
+            calls.append((session_id, window_id))
+
+        monitor._process_session_file = fake_process_session_file  # type: ignore[method-assign]
+
+        result = await monitor.check_for_updates({})
+
+        assert result == []
+        assert calls == []
     finally:
         window_store.reset()

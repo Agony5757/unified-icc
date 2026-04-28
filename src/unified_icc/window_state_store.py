@@ -191,23 +191,14 @@ class WindowStateStore:
     def find_channel_by_session(self, session_id: str) -> str | None:
         """Find the Feishu channel_id for a session by looking up window_store.
 
-        Strategy:
-        1. Exact session_id match in window_states
-        2. If no session_id is set (newly created window before monitor linked it),
-           return the channel_id of the first window that has one (single-session assumption).
+        Only exact session_id matches are valid here. Broad fallbacks cause stale
+        or unrelated transcripts to be routed back to the wrong frontend chat.
         """
         window_id = self.find_window_by_session(session_id)
         if window_id:
             state = self.window_states.get(window_id)
             if state and state.channel_id:
                 return state.channel_id
-
-        # Fallback: session_id not yet linked to window (new window before monitor ran).
-        # Return channel_id of the first window that has one — valid for single-session bots.
-        if session_id:
-            for wid, state in self.window_states.items():
-                if state.channel_id:
-                    return state.channel_id
         return None
 
     def has_window(self, window_id: str) -> bool:

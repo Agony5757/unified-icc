@@ -23,6 +23,7 @@ logger = structlog.get_logger()
 
 _APPROVAL_MODE_NORMAL = "normal"
 _APPROVAL_MODE_YOLO = "yolo"
+_CLAUDE_DEFAULT_PERMISSION_FLAG = "--permission-mode default"
 _YOLO_FLAGS: dict[str, str] = {
     "claude": "--dangerously-skip-permissions",
     "codex": "--dangerously-bypass-approvals-and-sandbox",
@@ -151,6 +152,12 @@ def resolve_launch_command(provider_name: str, *, approval_mode: str = _APPROVAL
             command = registry.get("claude").capabilities.launch_command
 
     if approval_mode.lower() != _APPROVAL_MODE_YOLO:
+        if (
+            provider == "claude"
+            and _CLAUDE_DEFAULT_PERMISSION_FLAG not in command
+            and "--dangerously-skip-permissions" not in command
+        ):
+            return f"{command} {_CLAUDE_DEFAULT_PERMISSION_FLAG}"
         return command
     yolo_flag = _YOLO_FLAGS.get(provider)
     if not yolo_flag or yolo_flag in command:
