@@ -22,6 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+import asyncio
 import structlog
 
 from .state_persistence import unwired_save
@@ -377,8 +378,11 @@ class ChannelRouter:
         try:
             from . import tmux_manager
             import threading
-            # tmux_manager is sync; run in background thread to avoid blocking
-            t = threading.Thread(target=tmux_manager.kill_window, args=(window_id,), daemon=True)
+
+            def _sync_kill() -> None:
+                asyncio.run(tmux_manager.kill_window(window_id))
+
+            t = threading.Thread(target=_sync_kill, daemon=True)
             t.start()
             logger.info("Triggered tmux kill for window %s", window_id)
         except Exception:

@@ -26,7 +26,7 @@ def _run_async(coro) -> Any:
         loop.close()
 
 
-async def _async_send_command(cmd: str, **kwargs: Any) -> dict[str, Any]:
+async def _async_send_command(cmd: str, **kwargs: Any) -> Any:
     if not SOCKET_PATH.exists():
         raise DaemonError(
             "Gateway daemon is not running. Start it with: unified-icc gateway start"
@@ -60,7 +60,7 @@ async def _async_send_command(cmd: str, **kwargs: Any) -> dict[str, Any]:
         await writer.wait_closed()
 
 
-def send_command(cmd: str, **kwargs: Any) -> dict[str, Any]:
+def send_command(cmd: str, **kwargs: Any) -> Any:
     """Synchronous wrapper for CLI commands."""
     return _run_async(_async_send_command(cmd, **kwargs))
 

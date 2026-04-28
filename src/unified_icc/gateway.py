@@ -78,7 +78,7 @@ class UnifiedICC:
         # This handles the case where cclark was killed while a session was active,
         # leaving stale window_states entries. Also populate _created_windows for any
         # window that has a channel binding (proving it was cclark-created).
-        self._startup_cleanup()
+        await self._startup_cleanup()
 
         # Start session monitor
         self._monitor = SessionMonitor()
@@ -208,7 +208,7 @@ class UnifiedICC:
 
     # ── Startup cleanup ──────────────────────────────────────────────────
 
-    def _startup_cleanup(self) -> None:
+    async def _startup_cleanup(self) -> None:
         """Kill tmux windows with no active channel binding and populate _created_windows.
 
         On startup, window_states may contain entries for windows that were bound
@@ -233,7 +233,7 @@ class UnifiedICC:
             )
             logger.info("Startup cleanup: killing orphaned window %s (%s)", wid, state_desc)
             try:
-                tmux_manager.kill_window(wid)
+                await tmux_manager.kill_window(wid)
             except Exception:
                 logger.exception("Failed to kill orphaned window %s", wid)
             window_store.remove_window(wid)

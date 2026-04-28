@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import typer
 from rich.console import Console
@@ -31,11 +31,12 @@ def session_list() -> None:
     """List all active sessions."""
     require_daemon()
     try:
-        sessions = send_command("session_list")
+        result = send_command("session_list")
     except DaemonError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1)
 
+    sessions: list[dict[str, Any]] = result if isinstance(result, list) else []
     if not sessions:
         console.print("[dim]No active sessions.[/dim]")
         return
@@ -135,7 +136,7 @@ def session_status(
         raise typer.Exit(1)
 
     if session_id:
-        output = result[0].get("output", "(no output)") if result else "(not found)"
+        output = result[0].get("output", "(no output)") if isinstance(result, list) and result else "(not found)"
         console.print(f"[cyan]Session:[/cyan] {session_id}")
         console.print(output)
     else:
@@ -145,6 +146,6 @@ def session_status(
         table = Table(title="Sessions")
         table.add_column("Session ID", style="cyan")
         table.add_column("Display Name", style="green")
-        for s in result:
+        for s in result if isinstance(result, list) else []:
             table.add_row(s.get("session_id", ""), s.get("display_name", ""))
         console.print(table)
