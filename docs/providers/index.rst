@@ -14,7 +14,7 @@ Unified ICC 通过统一抽象支持多种 AI 编程助手 Provider。
      - 启动命令
    * - Claude
      - ``claude-code``
-     - ``claude``
+     - normal: ``claude --permission-mode default``；yolo: ``claude --dangerously-skip-permissions``
    * - Codex
      - ``codex``
      - ``codex``
@@ -157,7 +157,7 @@ AgentProvider 协议
            ...
 
 ProviderCapabilities
--------------------
+--------------------
 
 每个 Provider 声明其能力：
 
@@ -236,11 +236,26 @@ Provider 功能对比
      - ❌
      - ❌
 
+Claude 权限模式
+----------------
+
+``normal`` / ``standard`` 会话启动 Claude 时会显式传入 ``--permission-mode default``。
+这用于覆盖本机用户配置中可能存在的 ``permissions.defaultMode = bypassPermissions``，让 Claude 重新显示权限确认 UI。
+
+``yolo`` 会话才会使用 ``--dangerously-skip-permissions``。
+
+Claude terminal prompt
+----------------------
+
+Claude 的权限确认和 plan-mode 决策首先出现在 tmux terminal UI 中。
+Provider 的 ``parse_terminal_status()`` 会从 pane 文本中识别这些交互状态，并通过 gateway 状态事件交给前端。
+前端可以把该状态渲染为卡片、按钮或文本提示；当前 cclark 使用飞书卡片展示，并通过普通回复 ``1`` / ``2`` / ``3`` 驱动焦点中的 Claude UI。
+
 使用 Provider
 -------------
 
 按名称获取 Provider
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -265,7 +280,7 @@ Provider 功能对比
        provider = registry.get("claude")
 
 列出可用 Provider
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -284,14 +299,14 @@ Provider 功能对比
 
    # 普通模式
    cmd = resolve_launch_command("claude")
-   # "claude"
+   # "claude --permission-mode default"
 
    # Yolo 模式（跳过权限）
    cmd = resolve_launch_command("claude", approval_mode="yolo")
    # "claude --dangerously-skip-permissions"
 
 检测 Provider
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
