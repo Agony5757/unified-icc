@@ -5,7 +5,7 @@ import pytest
 from unified_icc.monitor_events import SessionInfo
 from unified_icc.monitor_state import TrackedSession
 from unified_icc.session_monitor import SessionMonitor
-from unified_icc.tmux_manager import tmux_manager
+from unified_icc.tmux_manager import TmuxWindow, tmux_manager
 from unified_icc.window_state_store import window_store
 
 
@@ -41,8 +41,18 @@ async def test_detect_session_id_uses_raw_status_probe(monkeypatch, tmp_path: Pa
         assert with_ansi is False
         return "Session ID: sid-12345678"
 
+    async def fake_find_window_by_id(window_id: str) -> TmuxWindow:
+        assert window_id == "@2"
+        return TmuxWindow(
+            window_id="@2",
+            window_name="claude",
+            cwd="/tmp",
+            pane_current_command="claude",
+        )
+
     monkeypatch.setattr(tmux_manager, "send_keys", fake_send_keys)
     monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window_by_id)
 
     assert await monitor.detect_session_id("@2") == "sid-12345678"
     assert calls == [
@@ -53,6 +63,39 @@ async def test_detect_session_id_uses_raw_status_probe(monkeypatch, tmp_path: Pa
         ("@2", "Escape", False, False, True),
         ("@2", "C-u", False, False, True),
     ]
+
+
+@pytest.mark.asyncio
+async def test_detect_session_id_does_not_probe_before_claude_is_running(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monitor = SessionMonitor(state_file=tmp_path / "monitor_state.json")
+    calls = []
+
+    async def fake_send_keys(*args, **kwargs) -> bool:
+        calls.append((args, kwargs))
+        return True
+
+    async def fake_find_window_by_id(window_id: str) -> TmuxWindow:
+        assert window_id == "@2"
+        return TmuxWindow(
+            window_id="@2",
+            window_name="claude",
+            cwd="/tmp",
+            pane_current_command="bash",
+        )
+
+    monkeypatch.setattr(tmux_manager, "send_keys", fake_send_keys)
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window_by_id)
+    monkeypatch.setattr(
+        "unified_icc.session_monitor._SESSION_ID_PROBE_READY_TIMEOUT", 0.01
+    )
+    monkeypatch.setattr(
+        "unified_icc.session_monitor._SESSION_ID_PROBE_READY_INTERVAL", 0.001
+    )
+
+    assert await monitor.detect_session_id("@2") is None
+    assert calls == []
 
 
 def test_link_window_for_session_info_matches_unique_created_window_by_cwd(tmp_path: Path) -> None:

@@ -57,6 +57,8 @@ _LoopError = (OSError, RuntimeError, json.JSONDecodeError, ValueError)
 _BACKOFF_MIN = 2.0
 _BACKOFF_MAX = 30.0
 _MSG_PREVIEW_LENGTH = 80
+_SESSION_ID_PROBE_READY_TIMEOUT = 5.0
+_SESSION_ID_PROBE_READY_INTERVAL = 0.2
 
 logger = structlog.get_logger()
 
@@ -86,6 +88,17 @@ def _normalize_path(path: str) -> str:
         return str(Path(path).resolve())
     except (OSError, RuntimeError, ValueError):
         return path
+
+
+async def _wait_for_claude_pane(window_id: str) -> bool:
+    """Wait briefly until the target pane is actually running Claude."""
+    deadline = time.monotonic() + _SESSION_ID_PROBE_READY_TIMEOUT
+    while time.monotonic() < deadline:
+        window = await tmux_manager.find_window_by_id(window_id)
+        if window and window.pane_current_command == "claude":
+            return True
+        await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
+    return False
 
 
 class SessionMonitor:
@@ -149,6 +162,13 @@ class SessionMonitor:
 
     async def _detect_session_id_unlocked(self, window_id: str) -> str | None:
         """Implementation for detect_session_id; caller must hold the window lock."""
+        if not await _wait_for_claude_pane(window_id):
+            logger.warning(
+                "detect_session_id: pane for %s did not become claude before probe",
+                window_id,
+            )
+            return None
+
         # Send /status without the normal TUI workarounds. The regular literal
         # path probes vim insert mode by typing "i", which can pollute Claude's
         # input box when the pane is a Claude TUI rather than vim.
