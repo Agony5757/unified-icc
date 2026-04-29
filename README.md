@@ -164,6 +164,7 @@ Unified ICC 将每个 CLI 视为具有标准化协议（`AgentProvider`）的 "P
 - `UnifiedICC.list_orphaned_agent_windows()` 可报告未被状态追踪的 live Claude tmux 窗口，但不会自动删除它们。
 - `SessionMonitor.detect_session_id()` 会通过原始 tmux key 发送 `/status`，避免普通输入路径污染 Claude 输入框。
 - 标准 Claude 会话应使用 `mode="normal"`，Provider 会注入 `--permission-mode default`；只有显式 yolo 才跳过权限。
+- 前端如果要驱动 Claude plan mode 的 `Tell Claude what to change`，需要支持“不带 Enter 的选择输入”和“下一条反馈文本再提交”两步流程；`UnifiedICC.send_input_to_window(..., enter=False)` 用于这个场景。
 
 ## 许可证
 

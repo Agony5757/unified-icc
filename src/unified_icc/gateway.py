@@ -202,9 +202,27 @@ class UnifiedICC:
         """Send text input to a tmux window."""
         await _send_to_window(window_id, text)
 
+    async def send_input_to_window(
+        self,
+        window_id: str,
+        text: str,
+        *,
+        enter: bool = True,
+        literal: bool = True,
+        raw: bool = False,
+    ) -> None:
+        """Send text or key input to a tmux window with explicit Enter control."""
+        await tmux_manager.send_keys(
+            window_id,
+            text,
+            enter=enter,
+            literal=literal,
+            raw=raw,
+        )
+
     async def send_key(self, window_id: str, key: str) -> None:
         """Send a special key to a tmux window."""
-        await asyncio.to_thread(tmux_manager.send_keys, window_id, key)
+        await tmux_manager.send_keys(window_id, key, enter=False, literal=False)
 
     # ── Output capture ─────────────────────────────────────────────────
 
