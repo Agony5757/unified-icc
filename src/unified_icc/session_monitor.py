@@ -59,6 +59,11 @@ _BACKOFF_MAX = 30.0
 _MSG_PREVIEW_LENGTH = 80
 _SESSION_ID_PROBE_READY_TIMEOUT = 5.0
 _SESSION_ID_PROBE_READY_INTERVAL = 0.2
+_SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY = 0.6
+_TRUST_WORKSPACE_MARKERS = (
+    "Quick safety check: Is this a project you created or one you trust?",
+    "Claude Code'll be able to read, edit, and execute files here.",
+)
 
 logger = structlog.get_logger()
 
@@ -71,7 +76,7 @@ _SESSION_ID_RE = re.compile(
 )
 
 
-def _extract_session_id_from_status(status_text: str) -> str | None:
+def extract_session_id_from_status(status_text: str) -> str | None:
     """Extract session_id from the raw output of /status."""
     if not status_text:
         return None
@@ -79,6 +84,9 @@ def _extract_session_id_from_status(status_text: str) -> str | None:
     if match:
         return match.group(1)
     return None
+
+
+_extract_session_id_from_status = extract_session_id_from_status
 
 
 def _normalize_path(path: str) -> str:
@@ -90,12 +98,66 @@ def _normalize_path(path: str) -> str:
         return path
 
 
+def _is_claude_trust_workspace_prompt(pane_text: str | None) -> bool:
+    """Return true when Claude is waiting for the startup workspace trust prompt."""
+    if not pane_text:
+        return False
+    if not all(marker in pane_text for marker in _TRUST_WORKSPACE_MARKERS):
+        return False
+    if "1. Yes, I trust this folder" not in pane_text:
+        return False
+
+    lines = [line.rstrip() for line in pane_text.splitlines()]
+    trust_idx = -1
+    for idx, line in enumerate(lines):
+        if "1. Yes, I trust this folder" in line:
+            trust_idx = idx
+
+    if trust_idx < 0:
+        return False
+
+    trailing = [line.strip() for line in lines[trust_idx + 1 :] if line.strip()]
+    if not trailing:
+        return False
+    if not any("Enter to confirm" in line for line in trailing):
+        return False
+
+    # Ignore historical scrollback: once the shell prompt appears after the
+    # trust prompt, the prompt is no longer the focused Claude UI.
+    return not any("$" in line or "command not found" in line for line in trailing)
+
+
+async def _accept_claude_trust_workspace_prompt(window_id: str) -> bool:
+    """Accept Claude's first-run trust prompt for a cclark-created workspace."""
+    pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+    if not _is_claude_trust_workspace_prompt(pane_text):
+        return False
+
+    logger.info("Accepting Claude trust-workspace prompt for %s", window_id)
+    await tmux_manager.send_keys(
+        window_id,
+        "1",
+        enter=True,
+        literal=True,
+        raw=True,
+    )
+    await asyncio.sleep(0.5)
+    return True
+
+
 async def _wait_for_claude_pane(window_id: str) -> bool:
-    """Wait briefly until the target pane is actually running Claude."""
+    """Wait briefly until the target pane is ready for Claude slash commands."""
     deadline = time.monotonic() + _SESSION_ID_PROBE_READY_TIMEOUT
     while time.monotonic() < deadline:
+        await _accept_claude_trust_workspace_prompt(window_id)
         window = await tmux_manager.find_window_by_id(window_id)
         if window and window.pane_current_command == "claude":
+            # Claude can report as the active process before its first-run
+            # trust prompt has finished rendering. Give the startup UI one
+            # short settle window, then re-check the pane before probing.
+            await asyncio.sleep(_SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY)
+            if await _accept_claude_trust_workspace_prompt(window_id):
+                continue
             return True
         await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
     return False
@@ -190,7 +252,7 @@ class SessionMonitor:
         for _ in range(10):
             await asyncio.sleep(0.2)
             pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
-            session_id = _extract_session_id_from_status(pane_text or "")
+            session_id = extract_session_id_from_status(pane_text or "")
             if session_id:
                 break
 

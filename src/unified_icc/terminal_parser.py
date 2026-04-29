@@ -78,6 +78,15 @@ UI_PATTERNS: list[UIPattern] = [
         bottom=(re.compile(r"^\s*Esc to cancel"),),
     ),
     UIPattern(
+        name="TrustWorkspacePrompt",
+        top=(
+            re.compile(r"^\s*Quick safety check: Is this a project you created or one you trust\?"),
+            re.compile(r"^\s*Accessing workspace:"),
+        ),
+        bottom=(re.compile(r"^\s*Enter to confirm"),),
+        context_above=3,
+    ),
+    UIPattern(
         name="RestoreCheckpoint",
         top=(re.compile(r"^\s*Restore the code"),),
         bottom=(re.compile(r"^\s*Enter to continue"),),
@@ -99,10 +108,20 @@ UI_PATTERNS: list[UIPattern] = [
         ),
     ),
     UIPattern(
+        name="PermissionsPanel",
+        top=(re.compile(r"^\s*Permissions:"),),
+        bottom=(
+            re.compile(r"Esc cancel"),
+            re.compile(r"Esc to (cancel|exit)"),
+        ),
+        context_above=3,
+    ),
+    UIPattern(
         name="SelectionUI",
         top=(re.compile(r"^\s*[❯›]\s"),),
         bottom=(
             re.compile(r"^\s*Esc to (cancel|exit)"),
+            re.compile(r"Esc cancel"),
             re.compile(r"^\s*Enter to (select|confirm|continue)"),
             re.compile(r"^\s*ctrl-g to edit"),
             re.compile(r"(?i)^\s*Press enter to (confirm|select|continue|submit)"),
@@ -177,6 +196,7 @@ def _try_extract(lines: list[str], pattern: UIPattern) -> InteractiveUIContent |
 _ACTION_HINT_RE = re.compile(
     r"(?i)^\s*("
     r"Esc to (cancel|exit)"
+    r"|.*Esc cancel"
     r"|Enter to (select|confirm|continue|submit)"
     r"|ctrl-g to edit"
     r"|Type to filter"

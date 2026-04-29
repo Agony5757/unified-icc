@@ -19,7 +19,7 @@ from .event_types import AgentMessageEvent, HookEvent, StatusEvent, WindowChange
 from .monitor_events import NewMessage, NewWindowEvent
 from .providers import resolve_launch_command
 from .session import session_manager
-from .session_monitor import SessionMonitor
+from .session_monitor import SessionMonitor, extract_session_id_from_status
 from .state_persistence import StatePersistence
 from .tmux_manager import send_to_window as _send_to_window, tmux_manager
 from .window_state_store import window_store
@@ -396,6 +396,21 @@ class UnifiedICC:
 
     async def _on_terminal_status(self, window_id: str, update: Any) -> None:
         ws = window_store.get_window_state(window_id)
+        display_label = (
+            getattr(update, "raw_text", "")
+            or getattr(update, "display_label", "")
+        )
+        detected_session_id = extract_session_id_from_status(display_label)
+        if detected_session_id and detected_session_id != ws.session_id:
+            logger.info(
+                "Updating window %s session_id from terminal status: %s -> %s",
+                window_id,
+                ws.session_id or "(empty)",
+                detected_session_id,
+            )
+            ws.session_id = detected_session_id
+            window_store._schedule_save()
+
         channels = channel_router.resolve_channels(window_id)
         if not channels and ws.channel_id:
             channels = [ws.channel_id]
@@ -408,10 +423,7 @@ class UnifiedICC:
                 if getattr(update, "is_interactive", False)
                 else "status"
             ),
-            display_label=(
-                getattr(update, "raw_text", "")
-                or getattr(update, "display_label", "")
-            ),
+            display_label=display_label,
             channel_ids=channels,
         )
         for cb in self._status_callbacks:

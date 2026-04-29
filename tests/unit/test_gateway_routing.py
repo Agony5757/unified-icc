@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 
 from unified_icc.gateway import UnifiedICC
 from unified_icc.monitor_events import NewMessage
@@ -73,6 +74,60 @@ async def test_on_new_message_routes_known_session_to_bound_window() -> None:
 
         assert len(seen) == 1
         assert seen[0].window_id == "@2"
+        assert seen[0].channel_ids == ["feishu:chat-1"]
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_terminal_status_updates_window_session_id() -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        gateway.channel_router.bind("feishu:chat-1", "@2")
+        ws = window_store.get_window_state("@2")
+        ws.session_id = "old-session"
+        ws.channel_id = "feishu:chat-1"
+
+        seen = []
+
+        async def callback(event):
+            seen.append(event)
+
+        gateway.on_status(callback)
+
+        await gateway._on_terminal_status(
+            "@2",
+            SimpleNamespace(
+                is_interactive=True,
+                raw_text="""
+❯ /status
+
+─────
+   Status   Config   Usage   Stats
+
+  Version:             2.1.122
+  Session ID:          e682d1c5-878a-4a73-b747-475b6127f577
+  cwd:                 /tmp/project
+  Esc to cancel
+""",
+            ),
+        )
+
+        assert window_store.get_window_state("@2").session_id == (
+            "e682d1c5-878a-4a73-b747-475b6127f577"
+        )
+        assert len(seen) == 1
+        assert seen[0].session_id == "e682d1c5-878a-4a73-b747-475b6127f577"
         assert seen[0].channel_ids == ["feishu:chat-1"]
     finally:
         gateway.channel_router._bindings.clear()

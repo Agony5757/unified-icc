@@ -249,7 +249,7 @@ Claude terminal prompt
 
 Claude 的权限确认和 plan-mode 决策首先出现在 tmux terminal UI 中。
 Provider 的 ``parse_terminal_status()`` 会从 pane 文本中识别这些交互状态，并通过 gateway 状态事件交给前端。
-前端可以把该状态渲染为卡片、按钮或文本提示；当前 cclark 使用飞书卡片展示，并通过普通回复 ``1`` / ``2`` / ``3`` 驱动焦点中的 Claude UI。
+前端可以把该状态渲染为卡片、按钮或文本提示；当前 cclark 使用飞书卡片展示，并通过普通回复卡片中列出的编号驱动焦点中的 Claude UI。
 
 使用 Provider
 -------------
