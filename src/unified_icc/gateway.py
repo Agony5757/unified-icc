@@ -6,7 +6,6 @@ event dispatch for any messaging frontend.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
