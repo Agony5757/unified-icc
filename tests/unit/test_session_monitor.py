@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from unified_icc.idle_tracker import IdleTracker
 from unified_icc.monitor_events import SessionInfo
 from unified_icc.monitor_state import TrackedSession
 from unified_icc.session_monitor import SessionMonitor, _is_claude_trust_workspace_prompt
@@ -9,15 +10,15 @@ from unified_icc.tmux_manager import TmuxWindow, tmux_manager
 from unified_icc.window_state_store import window_store
 
 
-class _IdleTrackerStub:
-    def get_last_activity(self, _session_id: str):
+class _IdleTrackerStub(IdleTracker):
+    def get_last_activity(self, session_id: str):
         return None
 
-    def record_activity(self, _session_id: str) -> None:
-        return None
+    def record_activity(self, session_id: str, ts: float | None = None) -> None:
+        pass
 
-    def clear_session(self, _session_id: str) -> None:
-        return None
+    def clear_session(self, session_id: str) -> None:
+        pass
 
 
 def test_trust_workspace_prompt_detector_ignores_historical_scrollback() -> None:

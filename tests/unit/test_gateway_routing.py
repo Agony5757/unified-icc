@@ -11,6 +11,7 @@ from unified_icc.window_state_store import window_store
 @pytest.mark.asyncio
 async def test_on_new_message_does_not_route_unknown_session() -> None:
     window_store.reset()
+    gateway: UnifiedICC | None = None
     try:
         gateway = UnifiedICC()
         gateway.channel_router._bindings.clear()
@@ -36,16 +37,18 @@ async def test_on_new_message_does_not_route_unknown_session() -> None:
         assert seen[0].window_id == ""
         assert seen[0].channel_ids == []
     finally:
-        gateway.channel_router._bindings.clear()
-        gateway.channel_router._reverse.clear()
-        gateway.channel_router._display_names.clear()
-        gateway.channel_router._channel_meta.clear()
+        if gateway is not None:
+            gateway.channel_router._bindings.clear()
+            gateway.channel_router._reverse.clear()
+            gateway.channel_router._display_names.clear()
+            gateway.channel_router._channel_meta.clear()
         window_store.reset()
 
 
 @pytest.mark.asyncio
 async def test_on_new_message_routes_known_session_to_bound_window() -> None:
     window_store.reset()
+    gateway: UnifiedICC | None = None
     try:
         gateway = UnifiedICC()
         gateway.channel_router._bindings.clear()
@@ -76,10 +79,11 @@ async def test_on_new_message_routes_known_session_to_bound_window() -> None:
         assert seen[0].window_id == "@2"
         assert seen[0].channel_ids == ["feishu:chat-1"]
     finally:
-        gateway.channel_router._bindings.clear()
-        gateway.channel_router._reverse.clear()
-        gateway.channel_router._display_names.clear()
-        gateway.channel_router._channel_meta.clear()
+        if gateway is not None:
+            gateway.channel_router._bindings.clear()
+            gateway.channel_router._reverse.clear()
+            gateway.channel_router._display_names.clear()
+            gateway.channel_router._channel_meta.clear()
         window_store.reset()
 
 
