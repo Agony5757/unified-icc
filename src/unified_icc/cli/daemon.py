@@ -35,6 +35,7 @@ def read_pid() -> int | None:
 
 
 def pid_is_alive(pid: int) -> bool:
+    """Return True if a process with the given PID is currently running."""
     try:
         os.kill(pid, 0)
         return True
@@ -255,6 +256,7 @@ async def run_daemon(*, verbose: bool = False) -> None:
 
 def start_detached() -> int | None:
     """Fork and run the daemon in a detached child process. Returns child PID."""
+    """Fork and run the daemon in a detached child process. Returns child PID."""
     pid = os.fork()
     if pid != 0:
         return pid  # parent returns child PID
@@ -280,6 +282,7 @@ def start_detached() -> int | None:
 
 
 def wait_for_socket(timeout: float = 5.0) -> bool:
+    """Poll the socket until it is present and reachable. Used by the parent after start_detached()."""
     """Wait for the socket to appear and be reachable (parent use after start_detached)."""
 
     loop = asyncio.new_event_loop()

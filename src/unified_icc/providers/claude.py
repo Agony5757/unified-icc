@@ -1,4 +1,9 @@
-"""Claude Code provider — wraps existing modules behind AgentProvider protocol."""
+"""Claude Code provider — wraps existing modules behind AgentProvider protocol.
+
+Wraps transcript_parser, terminal_parser, and claude_task_state to satisfy
+the AgentProvider protocol. Supports hooks, task tracking, and incremental
+JSONL transcript reads.
+"""
 
 from __future__ import annotations
 

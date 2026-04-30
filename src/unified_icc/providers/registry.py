@@ -12,13 +12,19 @@ class UnknownProviderError(LookupError):
 
 
 class ProviderRegistry:
-    """Maps provider name strings to AgentProvider classes."""
+    """Maps provider name strings to AgentProvider classes.
+
+    Supports lazy instantiation: get() creates and caches a singleton instance
+    on first access. Used by providers/__init__.py to register claude, codex,
+    gemini, pi, and shell providers.
+    """
 
     def __init__(self) -> None:
         self._providers: dict[str, type[AgentProvider]] = {}
         self._instances: dict[str, AgentProvider] = {}
 
     def register(self, name: str, provider_cls: type[AgentProvider]) -> None:
+        """Register a provider class under *name*. Invalidates any cached instance."""
         self._providers[name] = provider_cls
         self._instances.pop(name, None)
         logger.debug("Registered provider %r", name)

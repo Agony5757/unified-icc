@@ -1,4 +1,9 @@
-"""unified-icc session list/create/kill/attach/status"""
+"""unified-icc session list/create/kill/attach/status.
+
+Manages gateway sessions backed by tmux windows: list active sessions,
+create new ones, attach to an existing tmux window, kill sessions, and
+inspect pane output.
+"""
 
 from __future__ import annotations
 

@@ -27,8 +27,10 @@ logger = structlog.get_logger()
 class UserPreferences:
     """Per-user directory favorites and transcript read offsets.
 
-    Persistence is delegated: the ``_schedule_save`` callback (set by
-    SessionManager) triggers a debounced save after mutations.
+    Stores starred directories and MRU ordering per user_id, plus per-window
+    byte offsets for transcript read position. Persistence is delegated: the
+    ``_schedule_save`` callback (set by SessionManager) triggers a debounced
+    save after mutations.
     """
 
     user_dir_favorites: dict[int, dict[str, list[str]]] = field(default_factory=dict)

@@ -1,4 +1,9 @@
-"""Shell provider — generic shell session."""
+"""Shell provider — generic shell session.
+
+A minimal provider for raw shell windows (bash, zsh, etc.) that are not
+running a dedicated agent CLI. Does not support hooks, mailbox delivery,
+or command discovery.
+"""
 
 from __future__ import annotations
 

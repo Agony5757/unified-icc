@@ -1,4 +1,8 @@
-"""Pi CLI provider — JSONL-based with resume support."""
+"""Pi CLI provider — JSONL-based with resume support.
+
+Extends JsonlProvider with Pi-specific capabilities. Supports structured
+JSONL transcripts, resume, and continue.
+"""
 
 from __future__ import annotations
 

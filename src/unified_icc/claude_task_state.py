@@ -18,6 +18,8 @@ _PLAN_APPROVAL = "Plan approval needed"
 
 @dataclass(frozen=True, slots=True)
 class ClaudeTaskItem:
+    """A single task tracked from TaskCreate/TaskUpdate/TodoWrite transcript blocks."""
+
     task_id: str
     subject: str
     description: str = ""
@@ -30,6 +32,8 @@ class ClaudeTaskItem:
 
 @dataclass(frozen=True, slots=True)
 class ClaudeTaskSnapshot:
+    """Frozen snapshot of all tasks for a window, with counts and active task."""
+
     items: tuple[ClaudeTaskItem, ...]
     done_count: int
     open_count: int
@@ -82,7 +86,12 @@ def _iter_message_blocks(entry: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 class ClaudeTaskStateStore:
-    """In-memory Claude task tracker keyed by tmux window ID."""
+    """In-memory Claude task tracker keyed by tmux window ID.
+
+    Parses transcript entries for TaskCreate, TaskUpdate, TodoWrite, and tool_result
+    blocks to build and maintain a per-window snapshot of active tasks and subagents.
+    Not directly persisted — rebuilt on startup from the transcript by seed_task_state.
+    """
 
     def __init__(self) -> None:
         self._window_states: dict[str, _WindowTaskState] = {}

@@ -17,7 +17,12 @@ _VALID_SCOPES = frozenset({"topic", "window", "qualified", "chat"})
 
 
 class TopicStateRegistry:
-    """Registry for per-topic / per-window cleanup functions."""
+    """Centralised cleanup registry for per-scope lifecycle functions.
+
+    Allows modules to register callbacks keyed by scope (topic, window, qualified,
+    chat). Calling ``clear_<scope>`` invokes all registered callbacks for that scope.
+    Used to reset per-window caches (e.g. vim state, task state) when a window closes.
+    """
 
     def __init__(self) -> None:
         self._cleanups: dict[str, list[Callable[..., None]]] = {

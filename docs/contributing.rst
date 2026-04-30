@@ -122,12 +122,8 @@
        ├── _jsonl.py         # JSONL 基类
        ├── claude.py         # Claude Provider
        ├── codex.py          # Codex Provider
-       ├── codex_format.py   # Codex 格式化
-       ├── codex_status.py   # Codex 状态解析
        ├── gemini.py         # Gemini Provider
        ├── pi.py             # Pi Provider
-       ├── pi_discovery.py   # Pi 发现
-       ├── pi_format.py      # Pi 格式化
        ├── shell.py          # Shell Provider
        └── process_detection.py # 进程检测
 

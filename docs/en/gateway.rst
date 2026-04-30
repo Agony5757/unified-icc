@@ -69,7 +69,7 @@ Create a new tmux window running an agent.
        provider="claude",
        mode="normal",  # or "yolo" for approval bypass
    )
-   print(window.window_id)  # e.g., "cclark:1"
+   print(window.window_id)  # e.g., "@1"
    print(window.provider)  # "claude"
    print(window.cwd)        # "/path/to/project"
 
@@ -88,7 +88,7 @@ Kill a tmux window and clean up bindings.
 
 .. code-block:: python
 
-   await gateway.kill_window("cclark:1")
+   await gateway.kill_window("@1")
 
 **What happens:**
 
@@ -119,7 +119,7 @@ Send text input to a tmux window.
 
 .. code-block:: python
 
-   await gateway.send_to_window("cclark:1", "Hello, Claude!")
+   await gateway.send_to_window("@1", "Hello, Claude!")
 
 **Parameters:**
 
@@ -133,8 +133,8 @@ Send a special key to a tmux window.
 
 .. code-block:: python
 
-   await gateway.send_key("cclark:1", "C-c")  # Ctrl+C
-   await gateway.send_key("cclark:1", "C-d")  # Ctrl+D
+   await gateway.send_key("@1", "C-c")  # Ctrl+C
+   await gateway.send_key("@1", "C-d")  # Ctrl+D
 
 **Parameters:**
 
@@ -151,7 +151,7 @@ Capture the current pane content.
 
 .. code-block:: python
 
-   content = await gateway.capture_pane("cclark:1")
+   content = await gateway.capture_pane("@1")
    print(content)
 
 **Returns:** String containing the pane's text content
@@ -163,7 +163,7 @@ Capture a screenshot of the pane as PNG bytes.
 
 .. code-block:: python
 
-   image_bytes = await gateway.capture_screenshot("cclark:1")
+   image_bytes = await gateway.capture_screenshot("@1")
    with open("screenshot.png", "wb") as f:
        f.write(image_bytes)
 
@@ -247,7 +247,7 @@ Bind a channel to a window.
 
 .. code-block:: python
 
-   gateway.bind_channel("feishu:chat_123:thread_456", "cclark:1")
+   gateway.bind_channel("feishu:chat_123:thread_456", "@1")
 
 **Parameters:**
 
@@ -285,7 +285,7 @@ Find all channels bound to a window.
 
 .. code-block:: python
 
-   channels = gateway.resolve_channels("cclark:1")
+   channels = gateway.resolve_channels("@1")
    for channel in channels:
        await adapter.send_text(channel, "notification")
 
@@ -301,7 +301,7 @@ Get the provider for a window.
 
 .. code-block:: python
 
-   provider = gateway.get_provider("cclark:1")
+   provider = gateway.get_provider("@1")
    print(provider.capabilities.name)  # "claude"
 
 **Returns:** Provider instance for the window's agent

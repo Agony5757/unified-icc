@@ -16,7 +16,11 @@ logger = structlog.get_logger()
 
 @dataclass
 class TrackedSession:
-    """State for a tracked Claude Code session."""
+    """State for a tracked Claude Code session.
+
+    Records the byte offset of the last processed line in each transcript file
+    so the monitor can resume from the correct position on the next poll cycle.
+    """
 
     session_id: str
     file_path: str
@@ -36,7 +40,11 @@ class TrackedSession:
 
 @dataclass
 class MonitorState:
-    """Persistent state for the session monitor."""
+    """Persistent state for the session monitor.
+
+    Tracks all known sessions (tracked_sessions) with their byte offsets and the
+    current read offset for events.jsonl. Saved to monitor_state.json on changes.
+    """
 
     state_file: Path
     tracked_sessions: dict[str, TrackedSession] = field(default_factory=dict)

@@ -241,7 +241,7 @@ State File Format: state.json
 
    {
        "channel_bindings": {
-           "feishu:chat123:thread456": "cclark:1"
+           "feishu:chat123:thread456": "@1"
        },
        "channel_meta": {
            "feishu:chat123:thread456": {
@@ -249,7 +249,7 @@ State File Format: state.json
            }
        },
        "display_names": {
-           "cclark:1": "Claude Code"
+           "@1": "Claude Code"
        }
    }
 
@@ -259,7 +259,7 @@ State File Format: session_map.json
 .. code-block:: json
 
    {
-       "cclark:1": {
+       "@1": {
            "session_id": "abc123",
            "transcript_path": "/home/user/.claude/projects/myproj/.claude/history/session_abc123.jsonl",
            "cwd": "/home/user/projects/myproj",

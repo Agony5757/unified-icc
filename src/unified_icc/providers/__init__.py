@@ -32,6 +32,7 @@ _YOLO_FLAGS: dict[str, str] = {
 
 
 def has_yolo_mode(provider_name: str) -> bool:
+    """Return True if *provider_name* supports a yolo/approval-bypass mode."""
     return provider_name in _YOLO_FLAGS
 
 
@@ -78,6 +79,11 @@ def _reset_provider() -> None:
 
 
 def get_provider_for_window(_window_id: str, provider_name: str | None = None) -> AgentProvider:
+    """Return the provider for a window, preferring an explicit provider_name.
+
+    If *provider_name* is provided and registered, it is used directly.
+    Otherwise falls back to the active provider from config.
+    """
     _ensure_registered()
     if provider_name and registry.is_valid(provider_name):
         return registry.get(provider_name)

@@ -1,4 +1,8 @@
-"""Gemini CLI provider — whole-file JSON with resume support."""
+"""Gemini CLI provider — whole-file JSON with resume support.
+
+Extends JsonlProvider with Gemini-specific capabilities. Uses pane title
+stamps for detection and whole-file reads (not incremental).
+"""
 
 from __future__ import annotations
 

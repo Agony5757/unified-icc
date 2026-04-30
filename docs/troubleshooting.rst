@@ -153,7 +153,7 @@
        after = await gateway.capture_pane(window_id)
        print(f"发送后：\n{after[-500:]}")
 
-   asyncio.run(debug_send("cclark:1", "hello"))
+   asyncio.run(debug_send("@1", "hello"))
 
 ---
 
@@ -194,7 +194,7 @@
    from unified_icc.state_persistence import persistence_manager
 
    # 做一次变更
-   channel_router.bind("test:1", "cclark:1")
+   channel_router.bind("test:1", "@1")
 
    # 强制保存
    if hasattr(persistence_manager, 'flush'):
@@ -235,7 +235,7 @@ Provider 未检测到
    .. code-block:: bash
 
       # 检查 tmux 窗口标题
-      tmux display-message -t cclark:1 -p '#{window_name}'
+      tmux display-message -t @1 -p '#{window_name}'
 
 **解决方案**：
 

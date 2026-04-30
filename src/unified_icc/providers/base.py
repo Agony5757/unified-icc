@@ -40,7 +40,16 @@ class SessionStartEvent:
 
 @dataclass(frozen=True, slots=True)
 class AgentMessage:
-    """A single parsed message from the agent's transcript."""
+    """A single parsed message from the agent's transcript.
+
+    Attributes:
+        text: The rendered text content.
+        role: "user" or "assistant".
+        content_type: "text", "thinking", "tool_use", "tool_result", "local_command".
+        is_complete: Whether the message is fully rendered (vs streaming).
+        tool_use_id: ID linking a tool_use to its result.
+        tool_name: Name of the tool for tool_use entries.
+    """
 
     text: str
     role: MessageRole
@@ -54,7 +63,14 @@ class AgentMessage:
 
 @dataclass(frozen=True, slots=True)
 class StatusUpdate:
-    """Parsed terminal status line from the agent's pane."""
+    """Parsed terminal status line from the agent's pane.
+
+    Attributes:
+        raw_text: The full raw status text.
+        display_label: A short human-readable label.
+        is_interactive: True when an interactive UI (ask, approve, plan) is shown.
+        ui_type: Name of the UI type when interactive.
+    """
 
     raw_text: str
     display_label: str
@@ -76,7 +92,7 @@ class DiscoveredCommand:
 
 @dataclass(frozen=True, slots=True)
 class HookEvent:
-    """A structured event from the hook event log."""
+    """A structured event from the hook event log (events.jsonl)."""
 
     event_type: str
     window_key: str
@@ -90,7 +106,17 @@ class HookEvent:
 
 @dataclass(frozen=True, slots=True)
 class ProviderCapabilities:
-    """Declares what features a provider supports."""
+    """Declares which features a provider supports.
+
+    Attributes:
+        name: Provider name (e.g. "claude", "codex", "gemini").
+        launch_command: CLI command used to start the agent.
+        supports_hook: Whether the provider emits session_map.json entries.
+        supports_incremental_read: Whether the transcript can be read byte-by-byte.
+        transcript_format: "jsonl" or "plain".
+        builtin_commands: Tuple of built-in slash commands.
+        supports_task_tracking: Whether TaskCreate/TaskUpdate are parsed.
+    """
 
     name: str
     launch_command: str
@@ -116,7 +142,12 @@ class ProviderCapabilities:
 
 
 class AgentProvider(Protocol):
-    """Protocol that every agent CLI provider must satisfy."""
+    """Protocol that every agent CLI provider must satisfy.
+
+    Implementations (ClaudeProvider, CodexProvider, etc.) wrap provider-specific
+    I/O (transcript files, pane captures) behind a uniform interface used by
+    the gateway and monitor.
+    """
 
     @property
     def capabilities(self) -> ProviderCapabilities: ...

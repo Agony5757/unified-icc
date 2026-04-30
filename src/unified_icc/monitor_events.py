@@ -12,7 +12,7 @@ from pathlib import Path
 
 @dataclass
 class SessionInfo:
-    """Information about a Claude Code session file."""
+    """Information about a session file found on disk during project scanning."""
 
     session_id: str
     file_path: Path
@@ -21,7 +21,7 @@ class SessionInfo:
 
 @dataclass
 class NewMessage:
-    """A new message detected by the monitor."""
+    """A new message event emitted by the session monitor on each poll cycle."""
 
     session_id: str
     text: str
@@ -35,7 +35,7 @@ class NewMessage:
 
 @dataclass
 class NewWindowEvent:
-    """A new tmux window detected via session_map changes."""
+    """A new tmux window detected via session_map changes or live tmux scan."""
 
     window_id: str
     session_id: str

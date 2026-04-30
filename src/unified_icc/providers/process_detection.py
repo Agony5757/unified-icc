@@ -4,6 +4,9 @@ All supported CLIs (claude, codex, gemini) are Node.js scripts — tmux's
 ``pane_current_command`` shows ``bun`` or ``node`` instead of the CLI name.
 This module inspects the actual foreground process group on the pane's TTY
 to reliably identify which provider is running.
+
+Key functions: classify_provider_from_args(), detect_provider_from_tty(),
+detect_provider_cached().
 """
 
 from __future__ import annotations

@@ -9,7 +9,11 @@ import time
 
 
 class IdleTracker:
-    """Tracks per-session activity timestamps for idle detection."""
+    """Tracks per-session activity timestamps for idle detection.
+
+    Stores a monotonic timestamp for each active session ID. Used by the monitor
+    loop to detect sessions that have gone quiet (idle timeout).
+    """
 
     def __init__(self) -> None:
         self._last_activity: dict[str, float] = {}

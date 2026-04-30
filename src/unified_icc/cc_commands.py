@@ -52,6 +52,15 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
 
 @dataclass(frozen=True, slots=True)
 class CCCommand:
+    """A discoverable Claude Code command or skill.
+
+    Attributes:
+        name: Command name (e.g. "compact", "help").
+        description: Short description from frontmatter or docstring.
+        source: "builtin" (always available), "skill" (from ~/.claude/skills/),
+            or "command" (from ~/.claude/commands/).
+    """
+
     name: str
     description: str
     source: str  # "builtin", "skill", "command"

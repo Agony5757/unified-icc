@@ -13,7 +13,12 @@ logger = structlog.get_logger()
 
 
 class ScreenBuffer:
-    """Virtual terminal screen backed by pyte."""
+    """Virtual terminal screen backed by pyte.
+
+    Feeds raw ANSI-terminal output from tmux into a pyte virtual terminal,
+    producing clean rendered lines (stripped of escape codes) suitable for
+    content extraction. Used by terminal_parser to detect interactive UIs.
+    """
 
     def __init__(self, columns: int = 200, rows: int = 50) -> None:
         self._screen = pyte.Screen(columns, rows)

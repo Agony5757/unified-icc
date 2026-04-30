@@ -104,7 +104,11 @@ class PaneInfo:
 
 @dataclass
 class TmuxWindow:
-    """Information about a tmux window."""
+    """Information about a tmux window.
+
+    Returned by list_windows, find_window_by_id, discover_external_sessions, and
+    related methods. Use window_id (e.g. "@0") for all internal operations.
+    """
 
     window_id: str
     window_name: str
@@ -116,7 +120,13 @@ class TmuxWindow:
 
 
 class TmuxManager:
-    """Manages tmux windows for Claude Code sessions."""
+    """Manages tmux windows for Claude Code sessions.
+
+    Wraps libtmux for async I/O (via asyncio.to_thread). Provides window lifecycle,
+    pane capture, key forwarding, vim-mode auto-detection, and foreign-session
+    discovery (emdash, etc.). All methods are async; blocking libtmux calls are
+    offloaded to a thread pool.
+    """
 
     def __init__(self, session_name: str | None = None):
         """Initialize tmux manager.

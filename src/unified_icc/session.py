@@ -45,7 +45,15 @@ logger = structlog.get_logger()
 
 @dataclass
 class AuditIssue:
-    """A single issue found during state audit."""
+    """A single issue found during state audit.
+
+    Attributes:
+        category: Issue type — ghost_binding, orphaned_display_name,
+            orphaned_group_chat_id, stale_window_state, stale_offset,
+            display_name_drift, orphaned_window.
+        detail: Human-readable description of the issue.
+        fixable: Whether this issue can be automatically resolved.
+    """
 
     category: str  # ghost_binding | orphaned_display_name | orphaned_group_chat_id | stale_window_state | stale_offset | display_name_drift
     detail: str
@@ -54,7 +62,13 @@ class AuditIssue:
 
 @dataclass
 class AuditResult:
-    """Result of a state audit."""
+    """Result of a state audit.
+
+    Attributes:
+        issues: All discovered issues.
+        total_bindings: Total number of channel->window bindings at audit time.
+        live_binding_count: Bindings whose window is currently live in tmux.
+    """
 
     issues: list[AuditIssue]
     total_bindings: int

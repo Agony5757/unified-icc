@@ -123,7 +123,12 @@ def parse_jsonl_history_entry(entry: dict[str, Any]) -> AgentMessage | None:
 
 
 class JsonlProvider:
-    """Base class for hookless providers that use JSONL transcripts."""
+    """Base class for hookless providers that use JSONL transcripts.
+
+    Provides default implementations for JSONL-based providers (Codex, Gemini, Pi).
+    Subclasses set _CAPS (ProviderCapabilities) and _BUILTINS (command dict).
+    Subclasses that need whole-file reads override read_transcript_file().
+    """
 
     _CAPS: ClassVar[ProviderCapabilities]
     _BUILTINS: ClassVar[dict[str, str]] = {}

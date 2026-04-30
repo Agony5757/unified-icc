@@ -28,7 +28,12 @@ def unwired_save(owner: str) -> Callable[[], None]:
 
 
 class StatePersistence:
-    """Debounced, atomic JSON file persistence."""
+    """Debounced, atomic JSON file persistence.
+
+    Wraps a serialize function and writes to the given path on a 0.5 s debounce
+    delay, or immediately on flush(). Uses atomic_write_json (temp + rename) to
+    avoid partial-write corruption.
+    """
 
     def __init__(self, path: Path, serialize_fn: Callable[[], dict[str, Any]]) -> None:
         self._path = path

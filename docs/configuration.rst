@@ -232,7 +232,7 @@ GatewayConfig 属性
 
    {
        "channel_bindings": {
-           "feishu:chat123:thread456": "cclark:1"
+           "feishu:chat123:thread456": "@1"
        },
        "channel_meta": {
            "feishu:chat123:thread456": {
@@ -240,7 +240,7 @@ GatewayConfig 属性
            }
        },
        "display_names": {
-           "cclark:1": "Claude Code"
+           "@1": "Claude Code"
        }
    }
 
@@ -250,7 +250,7 @@ GatewayConfig 属性
 .. code-block:: json
 
    {
-       "cclark:1": {
+       "cclark:@1": {
            "session_id": "abc123",
            "transcript_path": "/home/user/.claude/projects/myproj/.claude/history/session_abc123.jsonl",
            "cwd": "/home/user/projects/myproj",

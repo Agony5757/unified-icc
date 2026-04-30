@@ -26,7 +26,7 @@ NOTIFICATION_MODES: tuple[str, ...] = ("all", "errors_only", "muted")
 
 @dataclass
 class WindowState:
-    """Persistent state for a tmux window."""
+    """Persistent per-window state: session_id, cwd, provider, modes, and channel binding."""
 
     session_id: str = ""
     cwd: str = ""
@@ -81,7 +81,12 @@ class WindowState:
 
 @dataclass
 class WindowStateStore:
-    """Per-window mode and session metadata store."""
+    """Per-window mode and session metadata store.
+
+    Manages window_states (window_id -> WindowState) and _created_windows
+    (which windows cclark created, for the fallback-scan guard). Persistence
+    is delegated via _schedule_save wired by SessionManager.
+    """
 
     window_states: dict[str, WindowState] = field(default_factory=dict)
     # Maps app_name → set of window_ids that cclark created via create_window().

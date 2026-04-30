@@ -1,4 +1,8 @@
-"""Codex CLI provider — JSONL-based with resume support."""
+"""Codex CLI provider — JSONL-based with resume support.
+
+Extends JsonlProvider with Codex-specific capabilities. Supports structured
+JSONL transcripts and session resume.
+"""
 
 from __future__ import annotations
 

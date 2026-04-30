@@ -74,7 +74,7 @@ Bind a channel to a window.
    # Bind a Feishu thread to a Claude window
    channel_router.bind(
        channel_id="feishu:chat_abc:thread_xyz",
-       window_id="cclark:1",
+       window_id="@1",
        user_id="U123456",
        display_name="Claude",
    )
@@ -205,9 +205,9 @@ The router persists its state automatically:
 
    # State format
    {
-       "channel_bindings": {"feishu:chat:thread": "cclark:1"},
+       "channel_bindings": {"feishu:chat:thread": "@1"},
        "channel_meta": {"feishu:chat:thread": {"user_id": "U123"}},
-       "display_names": {"cclark:1": "Claude Code"},
+       "display_names": {"@1": "Claude Code"},
    }
 
 from_dict()

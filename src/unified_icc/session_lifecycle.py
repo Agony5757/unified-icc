@@ -25,13 +25,26 @@ logger = structlog.get_logger()
 
 @dataclass
 class ReconcileResult:
+    """Result of reconciling the current session_map against the last known state.
+
+    Attributes:
+        sessions_to_remove: Session IDs that are no longer in session_map (ended/replaced).
+        new_windows: window_id -> details for newly appeared windows.
+        current_map: The reconciled current session_map.
+    """
+
     sessions_to_remove: set[str] = field(default_factory=set)
     new_windows: dict[str, dict[str, Any]] = field(default_factory=dict)
     current_map: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 class SessionLifecycle:
-    """Detects session_map changes and consolidates task-state cleanup."""
+    """Detects session_map changes and consolidates task-state cleanup.
+
+    Implements single-write authority: only this class may mutate claude_task_state.
+    Reconciles the current session_map against the last known state, returning which
+    sessions ended, which are new, and which changed session_id.
+    """
 
     def __init__(self) -> None:
         self._last_session_map: dict[str, dict[str, str]] = {}

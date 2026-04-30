@@ -124,12 +124,8 @@ Project Structure
        ├── _jsonl.py         # JSONL base class
        ├── claude.py         # Claude provider
        ├── codex.py          # Codex provider
-       ├── codex_format.py   # Codex formatting
-       ├── codex_status.py   # Codex status parsing
        ├── gemini.py         # Gemini provider
        ├── pi.py             # Pi provider
-       ├── pi_discovery.py   # Pi discovery
-       ├── pi_format.py      # Pi formatting
        ├── shell.py          # Shell provider
        └── process_detection.py # Process detection
 

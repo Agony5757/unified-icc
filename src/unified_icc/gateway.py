@@ -29,7 +29,10 @@ logger = structlog.get_logger()
 
 @dataclass
 class WindowInfo:
-    """Information about a managed tmux window."""
+    """Information about a managed tmux window.
+
+    Returned by UnifiedICC.create_window, list_windows, and list_orphaned_agent_windows.
+    """
 
     window_id: str
     display_name: str

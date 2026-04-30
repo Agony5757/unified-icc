@@ -38,7 +38,11 @@ _SWEEPABLE_STATUSES = frozenset({"read", "replied", "expired"})
 
 @dataclass
 class Message:
-    """A single inter-agent message."""
+    """A single inter-agent message.
+
+    Represents a request, reply, notify, or broadcast message between windows.
+    Includes TTL-based expiration, read/replied status, and optional file attachment.
+    """
 
     id: str
     from_id: str

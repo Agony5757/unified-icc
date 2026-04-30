@@ -153,7 +153,7 @@ Agent Not Responding to Input
        after = await gateway.capture_pane(window_id)
        print(f"After:\n{after[-500:]}")
 
-   asyncio.run(debug_send("cclark:1", "hello"))
+   asyncio.run(debug_send("@1", "hello"))
 
 
 State Not Persisting
@@ -193,7 +193,7 @@ State Not Persisting
    from unified_icc.state_persistence import persistence_manager
 
    # Make a change
-   channel_router.bind("test:1", "cclark:1")
+   channel_router.bind("test:1", "@1")
 
    # Force save
    if hasattr(persistence_manager, 'flush'):
@@ -233,7 +233,7 @@ Provider Not Detected
    .. code-block:: bash
 
       # Check tmux window title
-      tmux display-message -t cclark:1 -p '#{window_name}'
+      tmux display-message -t @1 -p '#{window_name}'
 
 **Solution:**
 

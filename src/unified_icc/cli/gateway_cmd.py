@@ -1,4 +1,8 @@
-"""unified-icc gateway start/stop/restart/status"""
+"""unified-icc gateway start/stop/restart/status.
+
+Manages the background gateway daemon lifecycle: start (foreground or detached),
+stop, restart, and status inspection via PID file and Unix socket.
+"""
 
 from __future__ import annotations
 

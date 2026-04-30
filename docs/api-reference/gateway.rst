@@ -67,7 +67,7 @@ create_window()
        provider="claude",
        mode="normal",  # 或 "yolo" 绕过审批
    )
-   print(window.window_id)  # 例如 "cclark:1"
+   print(window.window_id)  # 例如 "@1"
    print(window.provider)  # "claude"
    print(window.cwd)        # "/path/to/project"
 
@@ -86,7 +86,7 @@ kill_window()
 
 .. code-block:: python
 
-   await gateway.kill_window("cclark:1")
+   await gateway.kill_window("@1")
 
 **过程：**
 
@@ -117,7 +117,7 @@ send_to_window()
 
 .. code-block:: python
 
-   await gateway.send_to_window("cclark:1", "你好，Claude！")
+   await gateway.send_to_window("@1", "你好，Claude！")
 
 **参数：**
 
@@ -131,8 +131,8 @@ send_key()
 
 .. code-block:: python
 
-   await gateway.send_key("cclark:1", "C-c")  # Ctrl+C
-   await gateway.send_key("cclark:1", "C-d")  # Ctrl+D
+   await gateway.send_key("@1", "C-c")  # Ctrl+C
+   await gateway.send_key("@1", "C-d")  # Ctrl+D
 
 **参数：**
 
@@ -149,7 +149,7 @@ capture_pane()
 
 .. code-block:: python
 
-   content = await gateway.capture_pane("cclark:1")
+   content = await gateway.capture_pane("@1")
    print(content)
 
 **返回：** 包含窗格文本内容的字符串
@@ -161,7 +161,7 @@ capture_screenshot()
 
 .. code-block:: python
 
-   image_bytes = await gateway.capture_screenshot("cclark:1")
+   image_bytes = await gateway.capture_screenshot("@1")
    with open("screenshot.png", "wb") as f:
        f.write(image_bytes)
 
@@ -245,7 +245,7 @@ bind_channel()
 
 .. code-block:: python
 
-   gateway.bind_channel("feishu:chat_123:thread_456", "cclark:1")
+   gateway.bind_channel("feishu:chat_123:thread_456", "@1")
 
 **参数：**
 
@@ -283,7 +283,7 @@ resolve_channels()
 
 .. code-block:: python
 
-   channels = gateway.resolve_channels("cclark:1")
+   channels = gateway.resolve_channels("@1")
    for channel in channels:
        await adapter.send_text(channel, "通知")
 
@@ -299,7 +299,7 @@ get_provider()
 
 .. code-block:: python
 
-   provider = gateway.get_provider("cclark:1")
+   provider = gateway.get_provider("@1")
    print(provider.capabilities.name)  # "claude"
 
 **返回：** 窗口 AI 助手的 Provider 实例
