@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("UNIFIED_ICC_DIR", "/tmp/unified-icc-test-config")
+
 import pytest
 
 from unified_icc.channel_router import channel_router
@@ -9,7 +13,7 @@ from unified_icc.window_state_store import window_store
 
 @pytest.fixture(autouse=True)
 def isolate_persistent_singletons(tmp_path):
-    """Keep unit tests from writing to the developer's real ~/.cclark state."""
+    """Keep unit tests from writing to the developer's real ~/.unified-icc state."""
     original_persistence = session_manager._persistence
     session_manager._persistence = StatePersistence(
         tmp_path / "state.json",

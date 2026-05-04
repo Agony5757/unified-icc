@@ -276,8 +276,8 @@ Abstract base providing JSONL parsing helpers. Subclasses override `_CAPS` and `
 ## 6. State Files
 
 Providers do not directly own state files. Session metadata is stored in:
-- `~/.cclark/session_map.json` — hook-written session metadata (Claude only)
-- `~/.cclark/state.json` — provider_name stored per window in `WindowState`
+- `~/.unified-icc/session_map.json` — hook-written session metadata (Claude only)
+- `~/.unified-icc/state.json` — provider_name stored per window in `WindowState`
 
 ## 7. Error Handling
 

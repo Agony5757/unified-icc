@@ -9,16 +9,16 @@ from __future__ import annotations
 import os
 import signal
 import time
-from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.table import Table
+from unified_icc.utils import unified_icc_dir
 
 console = Console()
 app = typer.Typer(help="Manage the unified-icc API server.", no_args_is_help=True)
 
-SERVER_PID_FILE = Path.home() / ".cclark" / "server.pid"
+SERVER_PID_FILE = unified_icc_dir() / "server.pid"
 
 
 def _read_pid() -> int | None:

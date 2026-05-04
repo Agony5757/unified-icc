@@ -27,8 +27,8 @@
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/
-      chmod 755 ~/.cclark/
+      ls -la ~/.unified-icc/
+      chmod 755 ~/.unified-icc/
 
 **解决方案**：
 
@@ -40,8 +40,8 @@
    print(result.stdout.decode())
 
    # 检查状态目录
-   from unified_icc.utils import cclark_dir
-   print(cclark_dir())  # 应存在且可写
+   from unified_icc.utils import unified_icc_dir
+   print(unified_icc_dir())  # 应存在且可写
 
 ---
 
@@ -168,7 +168,7 @@
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/state.json
+      ls -la ~/.unified-icc/state.json
       # 若不存在，检查目录权限
 
 2. 持久化未调度
@@ -271,7 +271,7 @@ Provider 未检测到
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/events.jsonl
+      ls -la ~/.unified-icc/events.jsonl
 
 3. 钩子模块未加载
 

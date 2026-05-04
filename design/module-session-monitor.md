@@ -87,7 +87,7 @@ monitor.start()
 
 ### 3.2 `MonitorState`
 
-Persists per-session byte offsets so the monitor never re-reads old transcript data on restart. Written to `~/.cclark/monitor_state.json`.
+Persists per-session byte offsets so the monitor never re-reads old transcript data on restart. Written to `~/.unified-icc/monitor_state.json`.
 
 ```python
 @dataclass
@@ -154,7 +154,7 @@ _monitor_loop():
          (SessionEnd, SubagentStart, SubagentStop, TaskCompleted, …)
 
   2. session_map_sync.load_session_map()
-       → reads ~/.cclark/session_map.json
+       → reads ~/.unified-icc/session_map.json
        → updates window_store WindowState entries
 
   3. _detect_and_cleanup_changes()
@@ -225,9 +225,9 @@ _hook_event_callback(event)
 
 | File | Owner | Contents |
 |---|---|---|
-| `~/.cclark/monitor_state.json` | `MonitorState` | Per-session byte offsets; events.jsonl read offset |
-| `~/.cclark/session_map.json` | Claude Code hook / `session_map_sync` | window_key → session_id, cwd, transcript_path |
-| `~/.cclark/events.jsonl` | Claude Code hook | Append-only hook event log |
+| `~/.unified-icc/monitor_state.json` | `MonitorState` | Per-session byte offsets; events.jsonl read offset |
+| `~/.unified-icc/session_map.json` | Claude Code hook / `session_map_sync` | window_key → session_id, cwd, transcript_path |
+| `~/.unified-icc/events.jsonl` | Claude Code hook | Append-only hook event log |
 
 ## 6. Error Handling
 

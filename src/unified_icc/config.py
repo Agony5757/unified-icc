@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .utils import cclark_dir
+from .utils import unified_icc_dir
 
 logger = structlog.get_logger()
 
@@ -39,7 +39,7 @@ class GatewayConfig:
     """Gateway configuration loaded from environment variables."""
 
     def __init__(self) -> None:
-        self.config_dir = cclark_dir()
+        self.config_dir = unified_icc_dir()
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         for env_path in (Path(".env"), self.config_dir / ".env"):

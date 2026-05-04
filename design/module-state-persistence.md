@@ -11,7 +11,7 @@
 ## 2. Architecture
 
 ```
-~/.cclark/  (or $CCLARK_CONFIG_DIR/)
+~/.unified-icc/  (or $UNIFIED_ICC_DIR/)
 ├── state.json              # ChannelRouter bindings + WindowStateStore + UserPreferences
 │                           # Written by: StatePersistence (debounced)
 │
@@ -225,17 +225,17 @@ Codex/Gemini/Pi: new session detected via filesystem scan
 
 | File | Format | Owner | Written on | Read on |
 |---|---|---|---|---|
-| `~/.cclark/state.json` | JSON | `StatePersistence` | Debounced 0.5s after mutation | `SessionManager._load_state()` |
-| `~/.cclark/monitor_state.json` | JSON | `MonitorState` | End of each poll cycle | `SessionMonitor.__init__()` |
-| `~/.cclark/session_map.json` | JSON | Hook / `SessionMapSync` | Hook on session start; `write_hookless_session_map()` | Each poll cycle |
-| `~/.cclark/session_map.json.lock` | lock file | `SessionMapSync` | During write | N/A |
+| `~/.unified-icc/state.json` | JSON | `StatePersistence` | Debounced 0.5s after mutation | `SessionManager._load_state()` |
+| `~/.unified-icc/monitor_state.json` | JSON | `MonitorState` | End of each poll cycle | `SessionMonitor.__init__()` |
+| `~/.unified-icc/session_map.json` | JSON | Hook / `SessionMapSync` | Hook on session start; `write_hookless_session_map()` | Each poll cycle |
+| `~/.unified-icc/session_map.json.lock` | lock file | `SessionMapSync` | During write | N/A |
 
 ### Config Directory
 
-All files are stored under `~/.cclark/` by default. The `CCLARK_CONFIG_DIR` environment variable overrides this, allowing multiple independent installations:
+All files are stored under `~/.unified-icc/` by default. The `UNIFIED_ICC_DIR` environment variable overrides this, allowing multiple independent installations:
 
 ```python
-config.config_dir   # ~/.cclark or $CCLARK_CONFIG_DIR
+config.config_dir   # ~/.unified-icc or $UNIFIED_ICC_DIR
 config.state_file   # config_dir / "state.json"
 config.monitor_state_file  # config_dir / "monitor_state.json"
 config.session_map_file   # config_dir / "session_map.json"

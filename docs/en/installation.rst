@@ -97,15 +97,11 @@ await gateway.send_to_window(window.window_id, "Hello!")
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CCLARK_CONFIG_DIR` | `~/.cclark` | Configuration directory |
+| `UNIFIED_ICC_DIR` | `~/.unified-icc` | Configuration directory |
 | `TMUX_SESSION_NAME` | `cclark` | tmux session name |
 | `CCLARK_PROVIDER` | `claude` | Default agent provider |
 | `MONITOR_POLL_INTERVAL` | `1.0` | Poll interval in seconds |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude config directory |
-
-Legacy environment variables are also supported for backward compatibility:
-- `CCGRAM_*` (ccgram era)
-- `CCBOT_*` (original naming)
 
 ## Next Steps
 

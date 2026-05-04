@@ -153,8 +153,8 @@ session_lifecycle.handle_<event_type>(...)
 
 | File | Written by | Read by |
 |---|---|---|
-| `~/.cclark/state.json` | `window_store`, `channel_router` | `_startup_cleanup` |
-| `~/.cclark/session_map.json` | Claude Code hook, `session_map_sync` | `reconcile()` via `_load_current_session_map` |
+| `~/.unified-icc/state.json` | `window_store`, `channel_router` | `_startup_cleanup` |
+| `~/.unified-icc/session_map.json` | Claude Code hook, `session_map_sync` | `reconcile()` via `_load_current_session_map` |
 
 `_last_session_map` is held in memory only — it is the "previous" snapshot for the next reconcile. It is not persisted; on restart it starts empty and is populated from `session_map.json`.
 

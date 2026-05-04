@@ -219,7 +219,7 @@ All endpoints are prefixed with `/api/v1`.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/sessions` | Create agent session. Body: `{work_dir, provider, mode}` |
+| `POST` | `/sessions` | Create agent session. Body: `{channel_id?, work_dir, provider, mode}` |
 | `GET` | `/sessions` | List all sessions |
 | `GET` | `/sessions/{channel_id}` | Get session status |
 | `DELETE` | `/sessions/{channel_id}` | Close session |
@@ -237,8 +237,8 @@ All endpoints are prefixed with `/api/v1`.
 # Create a Claude session
 curl -X POST http://localhost:8900/api/v1/sessions \
   -H "Content-Type: application/json" \
-  -d '{"work_dir": "/tmp/project", "provider": "claude", "mode": "normal"}'
-# → {"channel_id": "api:a1b2c3d4-...", "window_id": "@3", ...}
+  -d '{"channel_id": "feishu:oc_chat", "work_dir": "/tmp/project", "provider": "claude", "mode": "normal"}'
+# → {"channel_id": "feishu:oc_chat", "window_id": "@3", ...}
 
 # Send input
 curl -X POST http://localhost:8900/api/v1/sessions/api:a1b2c3d4-.../input \
@@ -262,22 +262,22 @@ Connect to `ws://localhost:8900/api/v1/ws/{channel_id}` to receive real-time age
 **Client → Server messages** (JSON with `type` field):
 
 ```jsonc
-{"type": "session.create", "work_dir": "/tmp", "provider": "claude", "mode": "normal"}
-{"type": "input", "text": "hello", "enter": true, "literal": true}
-{"type": "key", "key": "Escape"}
-{"type": "capture.pane"}
+{"type": "session.create", "channel_id": "feishu:oc_chat", "work_dir": "/tmp", "provider": "claude", "mode": "normal"}
+{"type": "input", "channel_id": "feishu:oc_chat", "text": "hello", "enter": true, "literal": true}
+{"type": "key", "channel_id": "feishu:oc_chat", "key": "Escape"}
+{"type": "capture.pane", "channel_id": "feishu:oc_chat"}
 {"type": "session.list"}
-{"type": "session.close", "channel_id": "api:..."}
+{"type": "session.close", "channel_id": "feishu:oc_chat"}
 {"type": "ping"}
 ```
 
 **Server → Client messages**:
 
 ```jsonc
-{"type": "session.created", "channel_id": "api:...", "window_id": "@3", "provider": "claude", ...}
-{"type": "agent.message", "channel_id": "api:...", "messages": [{"text": "...", "role": "assistant", "content_type": "text", "is_complete": true}]}
-{"type": "agent.status", "channel_id": "api:...", "status": "working", "display_label": "Thinking..."}
-{"type": "agent.status", "channel_id": "api:...", "status": "interactive", "interactive": true}
+{"type": "session.created", "channel_id": "feishu:oc_chat", "window_id": "@3", "provider": "claude", ...}
+{"type": "agent.message", "channel_ids": ["feishu:oc_chat"], "messages": [{"text": "...", "role": "assistant", "content_type": "text", "is_complete": true}]}
+{"type": "agent.status", "channel_ids": ["feishu:oc_chat"], "status": "working", "display_label": "Thinking..."}
+{"type": "agent.status", "channel_ids": ["feishu:oc_chat"], "status": "interactive", "interactive": true}
 {"type": "window.change", "window_id": "@3", "change_type": "new", "provider": "claude"}
 {"type": "hook.event", "window_id": "@3", "event_type": "SessionStart", ...}
 {"type": "pong"}
@@ -388,7 +388,7 @@ Channel ID format is defined by the frontend. Feishu uses `"feishu:{chat_id}:{th
 ### `session_monitor.py` — SessionMonitor
 
 Internal component. Runs a 1s poll loop that:
-1. Reads new hook events from `~/.cclark/events.jsonl`
+1. Reads new hook events from `~/.unified-icc/events.jsonl`
 2. Reads new transcript lines from each active window's transcript file
 3. Dispatches typed events to registered callbacks
 
@@ -641,7 +641,7 @@ for name in registry.list_names():
 
 ### State Directory
 
-`~/.cclark/` (configurable via `CCLARK_CONFIG_DIR`).
+`~/.unified-icc/` (configurable via `UNIFIED_ICC_DIR`).
 
 ### state.json
 
@@ -712,8 +712,8 @@ Run `unified-icc --help` for the full command reference.
 All settings via environment variables or `GatewayConfig`:
 
 ```bash
-# State directory (default: ~/.cclark)
-export CCLARK_CONFIG_DIR=~/.cclark
+# State directory (default: ~/.unified-icc)
+export UNIFIED_ICC_DIR=~/.unified-icc
 
 # Default provider (default: claude)
 export CCLARK_PROVIDER=claude

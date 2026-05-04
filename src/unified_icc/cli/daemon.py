@@ -12,9 +12,10 @@ from typing import Any
 
 from unified_icc import UnifiedICC
 from unified_icc.providers import detect_provider_from_command
+from unified_icc.utils import unified_icc_dir
 
-PID_FILE = Path.home() / ".cclark" / "gateway.pid"
-SOCKET_PATH = Path.home() / ".cclark" / "gateway.sock"
+PID_FILE = unified_icc_dir() / "gateway.pid"
+SOCKET_PATH = unified_icc_dir() / "gateway.sock"
 
 _gateway: UnifiedICC | None = None
 _shutdown_event: asyncio.Event | None = None

@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/v1", tags=["sessions"])
 
 
 class CreateSessionRequest(BaseModel):
+    channel_id: str = Field(default="", description="Optional external channel id")
     work_dir: str = Field(default="", description="Working directory for the agent")
     provider: str = Field(default="claude", description="Agent provider: claude, codex, gemini, pi, shell")
     mode: str = Field(default="normal", description="Approval mode: normal or yolo")
@@ -100,7 +101,7 @@ async def create_session(req: CreateSessionRequest) -> dict[str, Any]:
     if not Path(work_dir).is_dir():
         raise HTTPException(status_code=400, detail=f"Directory not found: {work_dir}")
 
-    channel_id = f"api:{uuid.uuid4()}"
+    channel_id = req.channel_id or f"api:{uuid.uuid4()}"
     window = await gateway.create_window(
         work_dir=work_dir,
         provider=req.provider,
@@ -118,6 +119,7 @@ async def create_session(req: CreateSessionRequest) -> dict[str, Any]:
     state.provider_name = req.provider
     state.cwd = work_dir
     state.channel_id = channel_id
+    state.approval_mode = "normal" if req.mode == "standard" else req.mode
     if req.name:
         state.window_name = req.name
 

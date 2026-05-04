@@ -135,10 +135,10 @@ State Management
 
 **State Files**
 
-* ``state.json`` (``~/.cclark/``) - Main gateway state
-* ``session_map.json`` (``~/.cclark/``) - tmux session mappings
-* ``monitor_state.json`` (``~/.cclark/``) - Poll loop state
-* ``events.jsonl`` (``~/.cclark/``) - Hook event log
+* ``state.json`` (``~/.unified-icc/``) - Main gateway state
+* ``session_map.json`` (``~/.unified-icc/``) - tmux session mappings
+* ``monitor_state.json`` (``~/.unified-icc/``) - Poll loop state
+* ``events.jsonl`` (``~/.unified-icc/``) - Hook event log
 
 **Persistence Strategy**
 

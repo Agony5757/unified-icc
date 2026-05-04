@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import socket
-from pathlib import Path
 from typing import Any
 
-SOCKET_PATH = Path.home() / ".cclark" / "gateway.sock"
+from unified_icc.utils import unified_icc_dir
+
+SOCKET_PATH = unified_icc_dir() / "gateway.sock"
 
 
 class DaemonError(Exception):

@@ -29,8 +29,8 @@ Gateway Won't Start
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/
-      chmod 755 ~/.cclark/
+      ls -la ~/.unified-icc/
+      chmod 755 ~/.unified-icc/
 
 **Solution:**
 
@@ -42,8 +42,8 @@ Gateway Won't Start
    print(result.stdout.decode())
 
    # Check state directory
-   from unified_icc.utils import cclark_dir
-   print(cclark_dir())  # Should exist and be writable
+   from unified_icc.utils import unified_icc_dir
+   print(unified_icc_dir())  # Should exist and be writable
 
 
 Messages Not Being Received
@@ -167,7 +167,7 @@ State Not Persisting
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/state.json
+      ls -la ~/.unified-icc/state.json
       # If doesn't exist, check directory permissions
 
 2. Persistence not scheduled
@@ -268,7 +268,7 @@ Hook Events Not Received
 
    .. code-block:: bash
 
-      ls -la ~/.cclark/events.jsonl
+      ls -la ~/.unified-icc/events.jsonl
 
 3. Hook module not loaded
 

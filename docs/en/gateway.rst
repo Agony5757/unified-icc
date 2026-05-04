@@ -35,7 +35,7 @@ Start the gateway: connect to tmux, load state, begin monitoring.
 **What happens:**
 
 1. Ensures tmux session exists (``tmux_manager.ensure_session()``)
-2. Loads persisted state from ``~/.cclark/state.json``
+2. Loads persisted state from ``~/.unified-icc/state.json``
 3. Wires together all singleton components
 4. Starts the SessionMonitor poll loop
 

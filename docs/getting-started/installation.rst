@@ -109,8 +109,8 @@
    * - 变量
      - 默认值
      - 说明
-   * - ``CCLARK_CONFIG_DIR``
-     - ``~/.cclark``
+   * - ``UNIFIED_ICC_DIR``
+     - ``~/.unified-icc``
      - 配置目录
    * - ``TMUX_SESSION_NAME``
      - ``cclark``
@@ -125,7 +125,7 @@
      - ``~/.claude``
      - Claude 配置目录
 
-为保持向后兼容，也支持旧版环境变量：
+为保持直接迁移，也支持旧版环境变量：
 
 - ``CCGRAM_*``（ccgram 时期）
 - ``CCBOT_*``（原始命名）

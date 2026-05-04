@@ -185,7 +185,7 @@ The API server and the existing Unix socket daemon (`cli/daemon.py`) are **paral
 | Unix socket daemon | `unified-icc gateway start` | JSON over Unix socket | CLI scripting |
 | API server | `unified-icc server start` | HTTP REST + WebSocket | Programmatic access |
 
-They share the same tmux session and state files (`~/.cclark/`), so they cannot run simultaneously. Each uses its own PID file (`gateway.pid` vs `server.pid`).
+They share the same tmux session and state files (`~/.unified-icc/`), so they cannot run simultaneously. Each uses its own PID file (`gateway.pid` vs `server.pid`).
 
 Existing daemon code is unchanged — the API server is an additive feature.
 

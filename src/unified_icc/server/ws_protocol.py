@@ -20,6 +20,7 @@ from typing import Any
 class SessionCreateMsg:
     type: str = field(default="session.create", init=False)
     request_id: str = ""
+    channel_id: str = ""
     work_dir: str = ""
     provider: str = "claude"
     mode: str = "normal"
@@ -43,15 +44,18 @@ class SessionCloseMsg:
 class InputMsg:
     type: str = field(default="input", init=False)
     request_id: str = ""
+    channel_id: str = ""
     text: str = ""
     enter: bool = True
     literal: bool = True
+    raw: bool = False
 
 
 @dataclass
 class InputRawMsg:
     type: str = field(default="input.raw", init=False)
     request_id: str = ""
+    channel_id: str = ""
     text: str = ""
 
 
@@ -59,6 +63,7 @@ class InputRawMsg:
 class KeyMsg:
     type: str = field(default="key", init=False)
     request_id: str = ""
+    channel_id: str = ""
     key: str = ""
 
 
@@ -66,12 +71,14 @@ class KeyMsg:
 class CapturePaneMsg:
     type: str = field(default="capture.pane", init=False)
     request_id: str = ""
+    channel_id: str = ""
 
 
 @dataclass
 class CaptureScreenshotMsg:
     type: str = field(default="capture.screenshot", init=False)
     request_id: str = ""
+    channel_id: str = ""
 
 
 @dataclass
@@ -140,7 +147,7 @@ def parse_client_message(raw: dict[str, Any]) -> ClientMessage:
     if cls is None:
         raise ValueError(f"Unknown message type: {msg_type}")
     # Filter out keys not in the dataclass fields
-    valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
+    valid_keys = {f.name for f in cls.__dataclass_fields__.values() if f.init}
     filtered = {k: v for k, v in raw.items() if k in valid_keys}
     return cls(**filtered)
 

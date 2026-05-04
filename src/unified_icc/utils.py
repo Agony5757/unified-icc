@@ -61,39 +61,20 @@ def log_throttle_sweep(
 
 # --- Config directory ---------------------------------------------------------
 
-CCLARK_DIR_ENV = "CCLARK_DIR"
-_CCGRAM_DIR_ENV = "CCGRAM_DIR"
-_LEGACY_DIR_ENV = "CCBOT_DIR"
+UNIFIED_ICC_DIR_ENV = "UNIFIED_ICC_DIR"
 
 _SCAN_LINES = 20
 _SUMMARY_MAX_CHARS = 80
 
 
-def cclark_dir() -> Path:
-    """Resolve config directory from CCLARK_DIR env var or default ~/.cclark.
-
-    Falls back to CCGRAM_DIR, then legacy CCBOT_DIR env vars.
+def unified_icc_dir() -> Path:
+    """Resolve config directory from env vars or default ~/.unified-icc.
     """
-    raw = os.environ.get(CCLARK_DIR_ENV, "")
-    if not raw:
-        raw = os.environ.get(_CCGRAM_DIR_ENV, "")
-        if raw:
-            logger.debug("Using CCGRAM_DIR for config directory")
-    if not raw:
-        raw = os.environ.get(_LEGACY_DIR_ENV, "")
-        if raw:
-            logger.warning(
-                "CCBOT_DIR is deprecated, use CCLARK_DIR instead",
-            )
+    raw = os.environ.get(UNIFIED_ICC_DIR_ENV, "")
     if raw:
-        return Path(raw)
+        return Path(raw).expanduser()
 
-    default = Path.home() / ".cclark"
-    legacy = Path.home() / ".ccgram"
-    if not (default / ".env").is_file() and (legacy / ".env").is_file():
-        logger.debug("Using legacy ~/.ccgram config dir")
-        return legacy
-    return default
+    return Path.home() / ".unified-icc"
 
 
 def tmux_session_name() -> str:

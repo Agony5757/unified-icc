@@ -92,10 +92,10 @@ async def _dispatch(ws: WebSocket, msg: Any, channel_id: str | None) -> None:
             await _handle_key(ws, msg, channel_id)
 
         elif msg_type == "capture.pane":
-            await _handle_capture_pane(ws, request_id, channel_id)
+            await _handle_capture_pane(ws, msg, request_id, channel_id)
 
         elif msg_type == "capture.screenshot":
-            await _handle_capture_screenshot(ws, request_id, channel_id)
+            await _handle_capture_screenshot(ws, msg, request_id, channel_id)
 
         elif msg_type == "verbose.set":
             # No-op for API server — full content always streamed
@@ -144,7 +144,7 @@ async def _handle_session_create(ws: WebSocket, msg: Any) -> None:
     work_dir = getattr(msg, "work_dir", "") or os.getcwd()
     mode = getattr(msg, "mode", "normal") or "normal"
 
-    new_channel_id = f"api:{uuid.uuid4()}"
+    new_channel_id = getattr(msg, "channel_id", "") or f"api:{uuid.uuid4()}"
     window = await gateway.create_window(work_dir=work_dir, provider=provider, mode=mode)
     gateway.bind_channel(new_channel_id, window.window_id)
 
@@ -154,6 +154,7 @@ async def _handle_session_create(ws: WebSocket, msg: Any) -> None:
     state.provider_name = provider
     state.cwd = work_dir
     state.channel_id = new_channel_id
+    state.approval_mode = "normal" if mode == "standard" else mode
 
     name = getattr(msg, "name", "")
     if name:
@@ -224,7 +225,7 @@ async def _handle_input(ws: WebSocket, msg: Any, channel_id: str | None) -> None
         await manager.send_to(ws, make_error(message="Gateway not initialized"))
         return
 
-    cid = channel_id or ""
+    cid = getattr(msg, "channel_id", "") or channel_id or ""
     window_id = gateway.resolve_window(cid)
     if window_id is None:
         await manager.send_to(ws, make_error(message=f"No session for channel {cid}"))
@@ -245,7 +246,7 @@ async def _handle_input_raw(ws: WebSocket, msg: Any, channel_id: str | None) -> 
         await manager.send_to(ws, make_error(message="Gateway not initialized"))
         return
 
-    cid = channel_id or ""
+    cid = getattr(msg, "channel_id", "") or channel_id or ""
     window_id = gateway.resolve_window(cid)
     if window_id is None:
         await manager.send_to(ws, make_error(message=f"No session for channel {cid}"))
@@ -260,7 +261,7 @@ async def _handle_key(ws: WebSocket, msg: Any, channel_id: str | None) -> None:
         await manager.send_to(ws, make_error(message="Gateway not initialized"))
         return
 
-    cid = channel_id or ""
+    cid = getattr(msg, "channel_id", "") or channel_id or ""
     window_id = gateway.resolve_window(cid)
     if window_id is None:
         await manager.send_to(ws, make_error(message=f"No session for channel {cid}"))
@@ -269,13 +270,18 @@ async def _handle_key(ws: WebSocket, msg: Any, channel_id: str | None) -> None:
     await gateway.send_key(window_id, msg.key)
 
 
-async def _handle_capture_pane(ws: WebSocket, request_id: str, channel_id: str | None) -> None:
+async def _handle_capture_pane(
+    ws: WebSocket,
+    msg: Any,
+    request_id: str,
+    channel_id: str | None,
+) -> None:
     gateway = _get_gateway()
     if gateway is None:
         await manager.send_to(ws, make_error(message="Gateway not initialized"))
         return
 
-    cid = channel_id or ""
+    cid = getattr(msg, "channel_id", "") or channel_id or ""
     window_id = gateway.resolve_window(cid)
     if window_id is None:
         await manager.send_to(ws, make_error(message=f"No session for channel {cid}"))
@@ -289,13 +295,18 @@ async def _handle_capture_pane(ws: WebSocket, request_id: str, channel_id: str |
     ))
 
 
-async def _handle_capture_screenshot(ws: WebSocket, request_id: str, channel_id: str | None) -> None:
+async def _handle_capture_screenshot(
+    ws: WebSocket,
+    msg: Any,
+    request_id: str,
+    channel_id: str | None,
+) -> None:
     gateway = _get_gateway()
     if gateway is None:
         await manager.send_to(ws, make_error(message="Gateway not initialized"))
         return
 
-    cid = channel_id or ""
+    cid = getattr(msg, "channel_id", "") or channel_id or ""
     window_id = gateway.resolve_window(cid)
     if window_id is None:
         await manager.send_to(ws, make_error(message=f"No session for channel {cid}"))
@@ -383,9 +394,13 @@ async def websocket_endpoint(
 
     await ws.accept()
 
-    # Subscribe to the requested channel
+    # Subscribe to the requested channel, or to global events when no channel is
+    # specified. The global mode is what frontend bridges use: one WebSocket
+    # receives events for all externally named channels.
     if channel_id:
         await manager.subscribe(channel_id, ws)
+    else:
+        await manager.subscribe_global(ws)
 
     try:
         await _ws_recv_loop(ws, channel_id)
@@ -394,3 +409,5 @@ async def websocket_endpoint(
     finally:
         if channel_id:
             await manager.unsubscribe(channel_id, ws)
+        else:
+            await manager.unsubscribe_global(ws)

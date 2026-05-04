@@ -5,7 +5,7 @@ maintain a window↔session mapping and an append-only event log.
 
 This module must NOT import config.py, since hooks run inside tmux panes
 where bot env vars are not set. Config directory resolution uses
-utils.cclark_dir() directly.
+utils.unified_icc_dir() directly.
 
 Key functions: hook_main() (CLI entry), _install_hook().
 """
@@ -322,9 +322,9 @@ def _write_event(
     window_key: str,
     data: dict[str, Any],
 ) -> None:
-    from .utils import cclark_dir
+    from .utils import unified_icc_dir
 
-    events_file = cclark_dir() / "events.jsonl"
+    events_file = unified_icc_dir() / "events.jsonl"
     events_file.parent.mkdir(parents=True, exist_ok=True)
 
     event_line = json.dumps(
@@ -410,9 +410,9 @@ def _update_session_map(
     transcript_path: str,
     tmux_session_name: str,
 ) -> None:
-    from .utils import cclark_dir, atomic_write_json
+    from .utils import unified_icc_dir, atomic_write_json
 
-    map_file = cclark_dir() / "session_map.json"
+    map_file = unified_icc_dir() / "session_map.json"
     map_file.parent.mkdir(parents=True, exist_ok=True)
 
     lock_path = map_file.with_suffix(".lock")

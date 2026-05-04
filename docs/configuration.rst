@@ -9,7 +9,7 @@ Unified ICC 完全通过环境变量配置（支持 `.env` 文件）。核心库
 配置按以下顺序加载（后者覆盖前者）：
 
 1. 默认值
-2. ``~/.cclark/.env`` 文件
+2. ``~/.unified-icc/.env`` 文件
 3. ``./.env`` 文件（当前工作目录）
 4. 环境变量
 
@@ -25,14 +25,12 @@ Unified ICC 完全通过环境变量配置（支持 `.env` 文件）。核心库
    * - 变量
      - 默认值
      - 说明
-   * - ``CCLARK_CONFIG_DIR``
-     - ``~/.cclark``
+   * - ``UNIFIED_ICC_DIR``
+     - ``~/.unified-icc``
      - 配置目录
    * - ``CCLARK_PROVIDER``
      - ``claude``
      - 默认 AI 助手 Provider
-
-兼容别名：``CCGRAM_CONFIG_DIR``、``CCBOT_CONFIG_DIR``
 
 Tmux 设置
 ~~~~~~~~~
@@ -50,8 +48,6 @@ Tmux 设置
      - （空）
      - 外部窗口发现模式
 
-兼容别名：``CCGRAM_TMUX_SESSION``
-
 监控设置
 ~~~~~~~~
 
@@ -67,8 +63,6 @@ Tmux 设置
    * - ``CCLARK_STATUS_POLL_INTERVAL``
      - ``1.0``
      - 状态轮询间隔（秒）
-
-兼容别名：``CCGRAM_STATUS_POLL_INTERVAL``
 
 助手设置
 ~~~~~~~~
@@ -110,15 +104,13 @@ Provider 命令覆盖
    * - ``CCLARK_SHELL_COMMAND``
      - 覆盖 ``shell`` 命令
 
-兼容别名：``CCGRAM_*``、``CCBOT_*``
-
 示例 .env 文件
 ~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    # 核心设置
-   CCLARK_CONFIG_DIR=~/.cclark
+   UNIFIED_ICC_DIR=~/.unified-icc
    CCLARK_PROVIDER=claude
 
    # Tmux
@@ -209,7 +201,7 @@ GatewayConfig 属性
 状态文件
 --------
 
-所有状态文件存储在 ``~/.cclark/``：
+所有状态文件存储在 ``~/.unified-icc/``：
 
 .. list-table::
    :header-rows: 1

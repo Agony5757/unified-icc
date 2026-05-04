@@ -33,7 +33,7 @@ start()
 **过程：**
 
 1. 确保 tmux 会话存在（``tmux_manager.ensure_session()``）
-2. 从 ``~/.cclark/state.json`` 加载持久化状态
+2. 从 ``~/.unified-icc/state.json`` 加载持久化状态
 3. 将所有单例组件连接在一起
 4. 启动 SessionMonitor 轮询循环
 

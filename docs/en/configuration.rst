@@ -11,7 +11,7 @@ Configuration Loading
 Configuration is loaded in this order (later sources override earlier):
 
 1. Default values
-2. ``~/.cclark/.env`` file
+2. ``~/.unified-icc/.env`` file
 3. ``./.env`` file (current working directory)
 4. Environment variables
 
@@ -28,14 +28,12 @@ Core Settings
    * - Variable
      - Default
      - Description
-   * - ``CCLARK_CONFIG_DIR``
-     - ``~/.cclark``
+   * - ``UNIFIED_ICC_DIR``
+     - ``~/.unified-icc``
      - Configuration directory
    * - ``CCLARK_PROVIDER``
      - ``claude``
      - Default agent provider
-
-Legacy equivalents: ``CCGRAM_CONFIG_DIR``, ``CCBOT_CONFIG_DIR``
 
 Tmux Settings
 ~~~~~~~~~~~~
@@ -54,8 +52,6 @@ Tmux Settings
      - (empty)
      - Patterns for external window discovery
 
-Legacy equivalent: ``CCGRAM_TMUX_SESSION``
-
 Monitoring Settings
 ~~~~~~~~~~~~~~~~~~~
 
@@ -72,8 +68,6 @@ Monitoring Settings
    * - ``CCLARK_STATUS_POLL_INTERVAL``
      - ``1.0``
      - Status poll interval in seconds
-
-Legacy equivalent: ``CCGRAM_STATUS_POLL_INTERVAL``
 
 Agent Settings
 ~~~~~~~~~~~~~~
@@ -117,15 +111,13 @@ Override the launch command for each provider:
    * - ``CCLARK_SHELL_COMMAND``
      - Override ``shell`` command
 
-Legacy equivalents: ``CCGRAM_*``, ``CCBOT_*``
-
 Example .env File
 ~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
    # Core settings
-   CCLARK_CONFIG_DIR=~/.cclark
+   UNIFIED_ICC_DIR=~/.unified-icc
    CCLARK_PROVIDER=claude
 
    # Tmux
@@ -217,7 +209,7 @@ GatewayConfig Attributes
 State Files
 -----------
 
-All state files are stored in ``~/.cclark/``:
+All state files are stored in ``~/.unified-icc/``:
 
 .. list-table::
    :header-rows: 1
