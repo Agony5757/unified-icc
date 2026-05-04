@@ -5,7 +5,13 @@ import pytest
 from unified_icc.idle_tracker import IdleTracker
 from unified_icc.monitor_events import SessionInfo
 from unified_icc.monitor_state import TrackedSession
-from unified_icc.session_monitor import SessionMonitor, _is_claude_trust_workspace_prompt
+from unified_icc.session_monitor import (
+    SessionMonitor,
+    _accept_codex_trust_prompt,
+    _is_claude_trust_workspace_prompt,
+    _is_codex_trust_prompt,
+    _wait_for_agent_pane,
+)
 from unified_icc.tmux_manager import TmuxWindow, tmux_manager
 from unified_icc.window_state_store import window_store
 
@@ -482,3 +488,163 @@ async def test_check_for_updates_skips_unbound_sessions_during_fallback_scan(
         assert calls == []
     finally:
         window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_agent_pane_waits_for_codex_command(monkeypatch) -> None:
+    """_wait_for_agent_pane should wait for the provider's launch_command."""
+    call_count = {"n": 0}
+
+    async def fake_find_window(window_id):
+        call_count["n"] += 1
+        if call_count["n"] >= 2:
+            return TmuxWindow(
+                window_id=window_id,
+                window_name="codex-win",
+                cwd="/tmp",
+                pane_current_command="codex",
+            )
+        return TmuxWindow(
+            window_id=window_id,
+            window_name="loading",
+            cwd="/tmp",
+            pane_current_command="bash",
+        )
+
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window)
+
+    result = await _wait_for_agent_pane("@1", provider_name="codex")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_wait_for_agent_pane_skips_claude_trust_prompt_for_codex(monkeypatch) -> None:
+    """Claude trust prompt acceptance must not be called for non-Claude providers."""
+    trust_calls = {"called": False}
+
+    async def fake_accept_trust(window_id):
+        trust_calls["called"] = True
+        return False
+
+    async def fake_find_window(window_id):
+        return TmuxWindow(
+            window_id=window_id,
+            window_name="codex-win",
+            cwd="/tmp",
+            pane_current_command="codex",
+        )
+
+    async def fake_capture_pane(window_id, with_ansi=True):
+        return ""
+
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window)
+    monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
+    monkeypatch.setattr(
+        "unified_icc.session_monitor._accept_claude_trust_workspace_prompt",
+        fake_accept_trust,
+    )
+
+    result = await _wait_for_agent_pane("@1", provider_name="codex")
+    assert result is True
+    assert trust_calls["called"] is False
+
+
+@pytest.mark.asyncio
+async def test_wait_for_agent_pane_accepts_node_for_codex(monkeypatch) -> None:
+    """_wait_for_agent_pane should accept 'node' as pane command for codex."""
+    capture_count = {"n": 0}
+
+    async def fake_find_window(window_id):
+        return TmuxWindow(
+            window_id=window_id,
+            window_name="codex-win",
+            cwd="/tmp",
+            pane_current_command="node",
+        )
+
+    async def fake_capture_pane(window_id, with_ansi=True):
+        capture_count["n"] += 1
+        # First capture: trust prompt. Second: UI visible.
+        if capture_count["n"] <= 1:
+            return (
+                "  project-local config, hooks, and exec policies to load.\n"
+                "\n"
+                "› 1. Yes, continue\n"
+                "  2. No, quit\n"
+                "\n"
+                "  Press enter to continue\n"
+            )
+        return (
+            "╭─────────────────────────────────────────────────────╮\n"
+            "│ >_ OpenAI Codex (v0.128.0)                          │\n"
+            "╰─────────────────────────────────────────────────────╯\n"
+        )
+
+    async def fake_send_keys(window_id, text, enter=True, literal=True, *, raw=False):
+        return True
+
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window)
+    monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
+    monkeypatch.setattr(tmux_manager, "send_keys", fake_send_keys)
+
+    result = await _wait_for_agent_pane("@1", provider_name="codex")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_wait_for_agent_pane_auto_accepts_codex_trust_prompt(monkeypatch) -> None:
+    """_wait_for_agent_pane should auto-accept Codex trust prompt."""
+    send_calls = []
+
+    async def fake_find_window(window_id):
+        return TmuxWindow(
+            window_id=window_id,
+            window_name="codex-win",
+            cwd="/tmp",
+            pane_current_command="node",
+        )
+
+    async def fake_capture_pane(window_id, with_ansi=True):
+        if not send_calls:
+            return (
+                "  project-local config, hooks, and exec policies to load.\n"
+                "\n"
+                "› 1. Yes, continue\n"
+                "  2. No, quit\n"
+                "\n"
+                "  Press enter to continue\n"
+            )
+        return (
+            "╭─────────────────────────────────────────────────────╮\n"
+            "│ >_ OpenAI Codex (v0.128.0)                          │\n"
+            "╰─────────────────────────────────────────────────────╯\n"
+        )
+
+    async def fake_send_keys(window_id, text, enter=True, literal=True, *, raw=False):
+        send_calls.append((window_id, text))
+        return True
+
+    monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window)
+    monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
+    monkeypatch.setattr(tmux_manager, "send_keys", fake_send_keys)
+
+    result = await _wait_for_agent_pane("@1", provider_name="codex")
+    assert result is True
+    assert ("@1", "1") in send_calls
+
+
+def test_is_codex_trust_prompt() -> None:
+    pane = (
+        "  project-local config, hooks, and exec policies to load.\n"
+        "\n"
+        "› 1. Yes, continue\n"
+        "  2. No, quit\n"
+        "\n"
+        "  Press enter to continue\n"
+    )
+    assert _is_codex_trust_prompt(pane) is True
+
+
+def test_is_codex_trust_prompt_rejects_empty() -> None:
+    assert _is_codex_trust_prompt("") is False
+    assert _is_codex_trust_prompt(None) is False

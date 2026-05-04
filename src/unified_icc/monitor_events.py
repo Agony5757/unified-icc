@@ -41,3 +41,4 @@ class NewWindowEvent:
     session_id: str
     window_name: str
     cwd: str
+    provider: str = ""

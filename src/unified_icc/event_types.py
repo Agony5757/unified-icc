@@ -30,6 +30,7 @@ class StatusEvent:
     status: str  # "working", "idle", "done", "dead", "interactive"
     display_label: str
     channel_ids: list[str] = field(default_factory=list)
+    provider: str = ""
 
 
 @dataclass

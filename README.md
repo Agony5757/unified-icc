@@ -272,13 +272,13 @@ class AgentProvider(Protocol):
         ...
 ```
 
-| Provider | Startup Command | Transcript | Capabilities |
-|----------|-----------------|------------|--------------|
-| `claude` | `claude --permission-mode default` | JSONL (`events.jsonl`) + `session_map.json` | hooks, /continue, plan mode, resume |
-| `codex` | `codex` | Plain text stdout | yolo mode |
-| `gemini` | `gemini` | JSONL | yolo mode |
-| `pi` | `pi` | JSONL | — |
-| `shell` | interactive shell | None | basic |
+| Provider | Startup Command | Transcript | Session Discovery | Capabilities |
+|----------|-----------------|------------|------------------|--------------|
+| `claude` | `claude --permission-mode default` | JSONL (`events.jsonl`) + `session_map.json` | Hook → `session_map.json` | hooks, /continue, plan mode, resume |
+| `codex` | `codex` | JSONL (`~/.codex/sessions/`) | Scan `~/.codex/sessions/` | resume, continue, status snapshot |
+| `gemini` | `gemini` | JSONL | Scan `~/.gemini/chats/` | resume, continue |
+| `pi` | `pi` | JSONL (`~/.pi/agent/sessions/`) | Scan `~/.pi/agent/sessions/` | resume, continue |
+| `shell` | interactive shell | None | None | basic |
 
 ---
 
@@ -470,6 +470,16 @@ for name in registry.list_names():
 - `mode="yolo"` launches `claude --dangerously-skip-permissions`
 - Session resume: pass `resume_session_id=session_id` to `create_window`
 - Plan mode: `send_to_window(window_id, "3", enter=False)` → then `send_to_window(window_id, feedback, enter=True)` (two-step for plan option 3 "Tell Claude what to change")
+
+### Codex-specific notes
+
+- No hook subsystem — session tracking relies on scanning `~/.codex/sessions/` for matching cwd
+- `discover_transcript(cwd, window_key)` scans the sessions directory for the most recent transcript whose `session_meta.cwd` matches the given path (within 120 seconds of creation)
+- Resume uses `resume <session_id>` subcommand syntax: `make_launch_args(resume_id="abc")` → `"resume abc"`
+- Continue uses `resume --last`: `make_launch_args(use_continue=True)` → `"resume --last"`
+- Transcript format: JSONL with `{timestamp, type, payload}` entries; entry types include `session_meta`, `response_item`, `input_item`, `event_msg`
+- Builtin commands: `/clear`, `/compact`, `/init`, `/mcp`, `/mention`, `/mode`, `/model`, `/permissions`, `/plan`, `/status`
+- Interactive prompts (edit confirmations, permission dialogs) are detected from raw pane text by `parse_terminal_status()` — no separate terminal parser dependency
 
 ---
 

@@ -28,7 +28,7 @@ from .config import config
 from .event_reader import read_new_events
 from .idle_tracker import IdleTracker
 from .monitor_state import MonitorState
-from .providers import get_provider_for_window, registry  # noqa: F401 (used by test patches)
+from .providers import detect_provider_from_command, get_provider_for_window, registry  # noqa: F401 (used by test patches)
 from .providers.base import StatusUpdate
 from .session_map import parse_session_map
 from .session_lifecycle import session_lifecycle
@@ -64,6 +64,13 @@ _TRUST_WORKSPACE_MARKERS = (
     "Quick safety check: Is this a project you created or one you trust?",
     "Claude Code'll be able to read, edit, and execute files here.",
 )
+
+_CODEX_TRUST_MARKERS = (
+    "project-local config, hooks, and exec policies to load",
+    "Yes, continue",
+)
+
+_CODEX_UI_MARKER = "OpenAI Codex"
 
 logger = structlog.get_logger()
 
@@ -145,19 +152,72 @@ async def _accept_claude_trust_workspace_prompt(window_id: str) -> bool:
     return True
 
 
-async def _wait_for_claude_pane(window_id: str) -> bool:
-    """Wait briefly until the target pane is ready for Claude slash commands."""
+def _is_codex_trust_prompt(pane_text: str | None) -> bool:
+    """Return true when Codex is waiting for the startup workspace trust prompt."""
+    if not pane_text:
+        return False
+    return all(marker in pane_text for marker in _CODEX_TRUST_MARKERS)
+
+
+async def _accept_codex_trust_prompt(window_id: str) -> bool:
+    """Accept Codex's first-run trust prompt for a cclark-created workspace."""
+    pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+    if not _is_codex_trust_prompt(pane_text):
+        return False
+
+    logger.info("Accepting Codex trust-workspace prompt for %s", window_id)
+    await tmux_manager.send_keys(
+        window_id,
+        "1",
+        enter=True,
+        literal=True,
+        raw=True,
+    )
+    await asyncio.sleep(0.5)
+    return True
+
+
+async def _wait_for_agent_pane(window_id: str, provider_name: str = "claude") -> bool:
+    """Wait briefly until the target pane is ready for agent slash commands."""
+    provider = registry.get(provider_name) if registry.is_valid(provider_name) else None
+    launch_command = provider.capabilities.launch_command if provider else provider_name
+
     deadline = time.monotonic() + _SESSION_ID_PROBE_READY_TIMEOUT
     while time.monotonic() < deadline:
-        await _accept_claude_trust_workspace_prompt(window_id)
+        if provider_name == "codex":
+            await _accept_codex_trust_prompt(window_id)
+        elif provider_name == "claude":
+            await _accept_claude_trust_workspace_prompt(window_id)
         window = await tmux_manager.find_window_by_id(window_id)
-        if window and window.pane_current_command == "claude":
-            # Claude can report as the active process before its first-run
-            # trust prompt has finished rendering. Give the startup UI one
-            # short settle window, then re-check the pane before probing.
-            await asyncio.sleep(_SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY)
-            if await _accept_claude_trust_workspace_prompt(window_id):
-                continue
+        if not window:
+            await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
+            continue
+        pane_cmd = window.pane_current_command
+        is_ready = pane_cmd == launch_command
+        # Codex CLI is a Node.js script; tmux reports pane_current_command as
+        # "node" rather than "codex".  When waiting for codex, accept "node"
+        # once we can verify the codex UI or trust prompt is visible.
+        if not is_ready and provider_name == "codex" and pane_cmd == "node":
+            pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+            if pane_text and (
+                _CODEX_UI_MARKER in pane_text
+                or _is_codex_trust_prompt(pane_text)
+            ):
+                is_ready = True
+        if is_ready:
+            if provider_name == "claude":
+                # Claude can report as the active process before its first-run
+                # trust prompt has finished rendering. Give the startup UI one
+                # short settle window, then re-check the pane before probing.
+                await asyncio.sleep(_SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY)
+                if await _accept_claude_trust_workspace_prompt(window_id):
+                    continue
+            if provider_name == "codex":
+                # Codex may show a trust prompt after initially appearing ready.
+                # Give it a short settle window, then re-check.
+                await asyncio.sleep(0.3)
+                if await _accept_codex_trust_prompt(window_id):
+                    continue
             return True
         await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
     return False
@@ -224,10 +284,13 @@ class SessionMonitor:
 
     async def _detect_session_id_unlocked(self, window_id: str) -> str | None:
         """Implementation for detect_session_id; caller must hold the window lock."""
-        if not await _wait_for_claude_pane(window_id):
+        ws = window_store.get_window_state(window_id)
+        provider_name = ws.provider_name or "claude"
+        if not await _wait_for_agent_pane(window_id, provider_name):
             logger.warning(
-                "detect_session_id: pane for %s did not become claude before probe",
+                "detect_session_id: pane for %s did not become %s before probe",
                 window_id,
+                provider_name,
             )
             return None
 
@@ -523,6 +586,44 @@ class SessionMonitor:
                             session_info.session_id,
                         )
 
+                # Provider-specific discovery for non-Claude bound sessions
+                # that _scan_projects_sync cannot find.
+                still_missing = missing_bound_session_ids - processed_session_ids
+                for session_id in still_missing:
+                    wid = window_store.find_window_by_session(session_id)
+                    if not wid:
+                        continue
+                    ws = window_store.get_window_state(wid)
+                    provider_name = ws.provider_name or "claude"
+                    if provider_name == "claude":
+                        continue
+                    if not registry.is_valid(provider_name):
+                        continue
+                    provider = registry.get(provider_name)
+                    if not ws.cwd:
+                        continue
+                    try:
+                        event = provider.discover_transcript(
+                            ws.cwd, wid, max_age=0,
+                        )
+                    except (OSError, json.JSONDecodeError, ValueError):
+                        continue
+                    if not event or not event.transcript_path:
+                        continue
+                    try:
+                        await self._process_session_file(
+                            session_id,
+                            Path(event.transcript_path),
+                            new_messages,
+                            window_id=wid,
+                        )
+                        processed_session_ids.add(session_id)
+                    except Exception:
+                        logger.exception(
+                            "Error processing %s session %s",
+                            provider_name, session_id,
+                        )
+
         self.state.save_if_dirty()
 
         # Fallback: when session_map is empty but cclark has created windows,
@@ -588,6 +689,53 @@ class SessionMonitor:
                         logger.exception(
                             "Error processing session %s", session_info.session_id
                         )
+
+        # Provider-specific discovery for non-Claude providers (e.g. Codex).
+        # These providers store transcripts outside ~/.claude/projects/ and
+        # use discover_transcript() to locate them by cwd.  Runs every poll
+        # until the session is discovered (transient — Codex may need a few
+        # seconds to write the first transcript line).
+        for wid in window_store.get_created_windows():
+            ws = window_store.get_window_state(wid)
+            if ws.session_id:
+                continue  # already discovered
+            provider_name = ws.provider_name or "claude"
+            if provider_name == "claude":
+                continue  # handled by _scan_projects_sync / hooks
+            if not registry.is_valid(provider_name):
+                continue
+            provider = registry.get(provider_name)
+            if not ws.cwd:
+                continue
+            try:
+                event = provider.discover_transcript(ws.cwd, wid)
+            except (OSError, json.JSONDecodeError, ValueError):
+                logger.debug(
+                    "Provider %s discover_transcript failed for %s",
+                    provider_name, wid,
+                )
+                continue
+            if not event:
+                continue
+            ws.session_id = event.session_id
+            window_store._schedule_save()
+            logger.info(
+                "Discovered %s session %s for window %s via provider",
+                provider_name, event.session_id, wid,
+            )
+            if event.transcript_path:
+                try:
+                    await self._process_session_file(
+                        event.session_id,
+                        Path(event.transcript_path),
+                        new_messages,
+                        window_id=wid,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Error processing %s session %s",
+                        provider_name, event.session_id,
+                    )
 
         return new_messages
 
@@ -690,6 +838,7 @@ class SessionMonitor:
                         session_id=details["session_id"],
                         window_name=details.get("window_name", ""),
                         cwd=details.get("cwd", ""),
+                        provider=details.get("provider_name", ""),
                     )
                     try:
                         await self._new_window_callback(event)
@@ -747,6 +896,7 @@ class SessionMonitor:
                             session_id="",
                             window_name=window.window_name,
                             cwd=window.cwd,
+                            provider=detect_provider_from_command(window.pane_current_command),
                         )
                         try:
                             await self._new_window_callback(event)

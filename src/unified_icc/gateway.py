@@ -161,7 +161,9 @@ class UnifiedICC:
         return killed
 
     async def list_orphaned_agent_windows(self) -> list[WindowInfo]:
-        """List live Claude tmux windows that are not monitored by cclark state."""
+        """List live agent tmux windows that are not monitored by cclark state."""
+        from .providers import detect_provider_from_command
+
         bound_wids = channel_router.bound_window_ids()
         state_wids = set(window_store.iter_window_ids())
         managed_wids = bound_wids | state_wids | window_store.get_created_windows()
@@ -170,13 +172,14 @@ class UnifiedICC:
         for window in await tmux_manager.list_windows():
             if window.window_id in managed_wids:
                 continue
-            if window.pane_current_command != "claude":
+            provider = detect_provider_from_command(window.pane_current_command)
+            if not provider or provider == "shell":
                 continue
             orphans.append(
                 WindowInfo(
                     window_id=window.window_id,
                     display_name=window.window_name,
-                    provider="claude",
+                    provider=provider,
                     cwd=window.cwd,
                 )
             )
@@ -284,6 +287,8 @@ class UnifiedICC:
         channel binding must be marked as cclark-created so the fallback scan
         guard works correctly.
         """
+        from .providers import detect_provider_from_command
+
         bound_wids = self.channel_router.bound_window_ids()
         live_windows = await tmux_manager.list_windows()
         live_by_id = {w.window_id: w for w in live_windows}
@@ -317,7 +322,7 @@ class UnifiedICC:
             if not ws.window_name:
                 ws.window_name = live.window_name
             if not ws.provider_name:
-                ws.provider_name = "claude"
+                ws.provider_name = detect_provider_from_command(live.pane_current_command) or "claude"
             if not ws.channel_id:
                 channel_id = self.channel_router.resolve_channel_for_window(wid)
                 if channel_id:
@@ -369,10 +374,11 @@ class UnifiedICC:
 
     async def _on_new_window(self, event: NewWindowEvent) -> None:
         channel_router.resolve_channels(event.window_id)
+        provider = event.provider or "claude"
         change = WindowChangeEvent(
             window_id=event.window_id,
             change_type="new",
-            provider="claude",
+            provider=provider,
             cwd=event.cwd,
             display_name=event.window_name,
         )
@@ -427,6 +433,7 @@ class UnifiedICC:
             ),
             display_label=display_label,
             channel_ids=channels,
+            provider=ws.provider_name or "claude",
         )
         for cb in self._status_callbacks:
             try:

@@ -442,4 +442,131 @@ async def test_gateway_start_registers_active_monitor(monkeypatch) -> None:
 
     await gateway.stop()
     assert started["stopped"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_orphaned_agent_windows_detects_codex_windows(monkeypatch) -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        async def fake_list_windows():
+            return [
+                TmuxWindow(
+                    window_id="@1",
+                    window_name="codex-orphan",
+                    cwd="/tmp/project",
+                    pane_current_command="codex",
+                ),
+                TmuxWindow(
+                    window_id="@2",
+                    window_name="bash-shell",
+                    cwd="/tmp/project",
+                    pane_current_command="bash",
+                ),
+            ]
+
+        monkeypatch.setattr(tmux_manager, "list_windows", fake_list_windows)
+
+        orphans = await gateway.list_orphaned_agent_windows()
+
+        assert len(orphans) == 1
+        assert orphans[0].window_id == "@1"
+        assert orphans[0].provider == "codex"
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_list_orphaned_agent_windows_detects_multiple_providers(monkeypatch) -> None:
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        async def fake_list_windows():
+            return [
+                TmuxWindow(
+                    window_id="@1",
+                    window_name="claude-orphan",
+                    cwd="/tmp/a",
+                    pane_current_command="claude",
+                ),
+                TmuxWindow(
+                    window_id="@2",
+                    window_name="codex-orphan",
+                    cwd="/tmp/b",
+                    pane_current_command="codex",
+                ),
+                TmuxWindow(
+                    window_id="@3",
+                    window_name="bash",
+                    cwd="/tmp/c",
+                    pane_current_command="bash",
+                ),
+            ]
+
+        monkeypatch.setattr(tmux_manager, "list_windows", fake_list_windows)
+
+        orphans = await gateway.list_orphaned_agent_windows()
+
+        assert len(orphans) == 2
+        assert orphans[0].provider == "claude"
+        assert orphans[1].provider == "codex"
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
+
+
+@pytest.mark.asyncio
+async def test_on_new_window_uses_event_provider(monkeypatch) -> None:
+    from unified_icc.monitor_events import NewWindowEvent
+
+    window_store.reset()
+    gateway = UnifiedICC()
+    gateway.channel_router._bindings.clear()
+    gateway.channel_router._reverse.clear()
+    gateway.channel_router._display_names.clear()
+    gateway.channel_router._channel_meta.clear()
+
+    try:
+        captured = []
+
+        async def capture_change(change):
+            captured.append(change)
+
+        gateway.on_window_change(capture_change)
+
+        event = NewWindowEvent(
+            window_id="@5",
+            session_id="sess-123",
+            window_name="codex-window",
+            cwd="/tmp/project",
+            provider="codex",
+        )
+        await gateway._on_new_window(event)
+
+        assert len(captured) == 1
+        assert captured[0].provider == "codex"
+        assert captured[0].window_id == "@5"
+    finally:
+        gateway.channel_router._bindings.clear()
+        gateway.channel_router._reverse.clear()
+        gateway.channel_router._display_names.clear()
+        gateway.channel_router._channel_meta.clear()
+        window_store.reset()
     assert get_active_monitor() is None
