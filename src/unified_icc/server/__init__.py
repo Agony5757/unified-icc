@@ -30,7 +30,7 @@ def run_server(
     """
     import uvicorn
 
-    from unified_icc.config import config
+    from unified_icc.utils.config import config
 
     host = host or config.api_host
     port = port or config.api_port

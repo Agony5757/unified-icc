@@ -4,11 +4,7 @@ os.environ.setdefault("UNIFIED_ICC_DIR", "/tmp/unified-icc-test-config")
 
 import pytest
 
-from unified_icc.channel_router import channel_router
-from unified_icc.session import session_manager
-from unified_icc.state_persistence import StatePersistence
-from unified_icc.user_preferences import user_preferences
-from unified_icc.window_state_store import window_store
+from unified_icc import channel_router, session_manager, StatePersistence, user_preferences, window_store
 
 
 @pytest.fixture(autouse=True)

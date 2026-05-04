@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from unified_icc.providers import registry as provider_registry
-from unified_icc.window_state_store import window_store
+from unified_icc.tmux.window_state_store import window_store
 
 from ..auth import verify_ws_token
 from ..connection_manager import manager
@@ -158,7 +158,7 @@ async def _handle_session_create(ws: WebSocket, msg: Any) -> None:
 
     name = getattr(msg, "name", "")
     if name:
-        from unified_icc.tmux_manager import tmux_manager
+        from unified_icc.tmux.tmux_manager import tmux_manager
         await tmux_manager.rename_window(window.window_id, name)
         state.window_name = name
 

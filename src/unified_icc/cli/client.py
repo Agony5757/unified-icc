@@ -7,7 +7,7 @@ import json
 import socket
 from typing import Any
 
-from unified_icc.utils import unified_icc_dir
+from unified_icc.utils.utils import unified_icc_dir
 
 SOCKET_PATH = unified_icc_dir() / "gateway.sock"
 

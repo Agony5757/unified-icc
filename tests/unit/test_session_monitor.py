@@ -2,17 +2,17 @@ from pathlib import Path
 
 import pytest
 
-from unified_icc.idle_tracker import IdleTracker
-from unified_icc.monitor_events import SessionInfo
-from unified_icc.monitor_state import TrackedSession
-from unified_icc.session_monitor import (
+from unified_icc.utils.idle_tracker import IdleTracker
+from unified_icc.events import SessionInfo
+from unified_icc.state import TrackedSession
+from unified_icc.core.session_monitor import (
     SessionMonitor,
     _is_claude_trust_workspace_prompt,
     _is_codex_trust_prompt,
     _wait_for_agent_pane,
 )
-from unified_icc.tmux_manager import TmuxWindow, tmux_manager
-from unified_icc.window_state_store import window_store
+from unified_icc.tmux import TmuxWindow, tmux_manager
+from unified_icc.tmux.window_state_store import window_store
 
 
 class _IdleTrackerStub(IdleTracker):
@@ -213,7 +213,7 @@ Enter to confirm · Esc to cancel
     monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
     monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window_by_id)
     monkeypatch.setattr(
-        "unified_icc.session_monitor._SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY", 0
+        "unified_icc.core.session_monitor._SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY", 0
     )
 
     assert await monitor.detect_session_id("@2") == "sid-12345678"
@@ -256,10 +256,10 @@ async def test_detect_session_id_does_not_probe_before_claude_is_running(
     monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window_by_id)
     monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
     monkeypatch.setattr(
-        "unified_icc.session_monitor._SESSION_ID_PROBE_READY_TIMEOUT", 0.01
+        "unified_icc.core.session_monitor._SESSION_ID_PROBE_READY_TIMEOUT", 0.01
     )
     monkeypatch.setattr(
-        "unified_icc.session_monitor._SESSION_ID_PROBE_READY_INTERVAL", 0.001
+        "unified_icc.core.session_monitor._SESSION_ID_PROBE_READY_INTERVAL", 0.001
     )
 
     assert await monitor.detect_session_id("@2") is None
@@ -539,7 +539,7 @@ async def test_wait_for_agent_pane_skips_claude_trust_prompt_for_codex(monkeypat
     monkeypatch.setattr(tmux_manager, "find_window_by_id", fake_find_window)
     monkeypatch.setattr(tmux_manager, "capture_pane", fake_capture_pane)
     monkeypatch.setattr(
-        "unified_icc.session_monitor._accept_claude_trust_workspace_prompt",
+        "unified_icc.core.session_monitor._accept_claude_trust_workspace_prompt",
         fake_accept_trust,
     )
 

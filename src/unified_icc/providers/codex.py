@@ -20,12 +20,12 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
-from unified_icc.codex_format import format_codex_interactive_prompt
-from unified_icc.codex_status import (
+from unified_icc.protocol.codex_format import format_codex_interactive_prompt
+from unified_icc.protocol.codex_status import (
     build_codex_status_snapshot,
     has_codex_assistant_output_since,
 )
-from unified_icc.expandable_quote import format_expandable_quote
+from unified_icc.protocol.expandable_quote import format_expandable_quote
 from unified_icc.providers._jsonl import JsonlProvider
 from unified_icc.providers.base import (
     RESUME_ID_RE,

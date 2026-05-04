@@ -13,8 +13,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from unified_icc import UnifiedICC
-from unified_icc.config import config
-from unified_icc.event_types import (
+from unified_icc.utils.config import config
+from unified_icc.events.event_types import (
     AgentMessageEvent,
     HookEvent,
     StatusEvent,

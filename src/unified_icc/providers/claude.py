@@ -11,7 +11,7 @@ from typing import Any
 
 import structlog
 
-from unified_icc.cc_commands import CC_BUILTINS
+from unified_icc.adapter.cc_commands import CC_BUILTINS
 from unified_icc.providers.base import UUID_RE
 from unified_icc.providers.base import (
     AgentMessage,
@@ -20,7 +20,7 @@ from unified_icc.providers.base import (
     SessionStartEvent,
     StatusUpdate,
 )
-from unified_icc.terminal_parser import (
+from unified_icc.tmux.terminal_parser import (
     extract_bash_output,
     extract_interactive_content,
     format_status_display,
@@ -86,18 +86,18 @@ class ClaudeProvider:
         )
 
     def parse_transcript_line(self, line: str) -> dict[str, Any] | None:
-        from unified_icc.transcript_parser import TranscriptParser
+        from unified_icc.protocol.transcript_parser import TranscriptParser
         return TranscriptParser.parse_line(line)
 
     def read_transcript_file(self, file_path: str, last_offset: int) -> tuple[list[dict[str, Any]], int]:
-        from unified_icc.transcript_parser import TranscriptParser
+        from unified_icc.protocol.transcript_parser import TranscriptParser
         return TranscriptParser.read_file(file_path, last_offset)  # type: ignore[return-value]
 
     def parse_transcript_entries(
         self, entries: list[dict[str, Any]], pending_tools: dict[str, Any],
         cwd: str | None = None,
     ) -> tuple[list[AgentMessage], dict[str, Any]]:
-        from unified_icc.transcript_parser import TranscriptParser
+        from unified_icc.protocol.transcript_parser import TranscriptParser
         return TranscriptParser.parse_entries(entries, pending_tools, cwd=cwd)  # type: ignore[return-value]
 
     def parse_terminal_status(self, pane_text: str, *, pane_title: str = "") -> StatusUpdate | None:
@@ -124,7 +124,7 @@ class ClaudeProvider:
         return entry.get("type") == "user"
 
     def parse_history_entry(self, entry: dict[str, Any]) -> AgentMessage | None:
-        from unified_icc.transcript_parser import TranscriptParser
+        from unified_icc.protocol.transcript_parser import TranscriptParser
         return TranscriptParser.parse_history_entry(entry)
 
     def discover_transcript(self, cwd: str, window_key: str, *, max_age: float | None = None) -> SessionStartEvent | None:  # noqa: ARG002
@@ -149,10 +149,10 @@ class ClaudeProvider:
         return None
 
     async def seed_task_state(self, window_id: str, session_id: str, transcript_path: str) -> None:
-        from unified_icc.claude_task_state import claude_task_state
+        from unified_icc.utils.claude_task_state import claude_task_state
         entries_data = self.read_transcript_file(transcript_path, 0)[0]
         claude_task_state.rebuild_from_entries(window_id, session_id, entries_data)
 
     def apply_task_entries(self, window_id: str, session_id: str, entries: list[dict]) -> None:
-        from unified_icc.claude_task_state import claude_task_state
+        from unified_icc.utils.claude_task_state import claude_task_state
         claude_task_state.apply_entries(window_id, session_id, entries)

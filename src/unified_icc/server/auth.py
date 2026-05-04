@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from unified_icc.config import config
+from unified_icc.utils.config import config
 
 _bearer = HTTPBearer(auto_error=False)
 

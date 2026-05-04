@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from unified_icc.codex_format import format_codex_interactive_prompt
-from unified_icc.codex_status import has_codex_assistant_output_since
-from unified_icc.expandable_quote import (
+from unified_icc.protocol.codex_format import format_codex_interactive_prompt
+from unified_icc.protocol.codex_status import has_codex_assistant_output_since
+from unified_icc.protocol.expandable_quote import (
     EXPANDABLE_QUOTE_END,
     EXPANDABLE_QUOTE_START,
     format_expandable_quote,

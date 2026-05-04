@@ -16,7 +16,7 @@ import os
 
 import structlog
 
-from ..topic_state_registry import topic_state
+from ..utils.topic_state_registry import topic_state
 
 logger = structlog.get_logger()
 

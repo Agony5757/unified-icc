@@ -12,7 +12,7 @@ from typing import Any
 
 from unified_icc import UnifiedICC
 from unified_icc.providers import detect_provider_from_command
-from unified_icc.utils import unified_icc_dir
+from unified_icc.utils.utils import unified_icc_dir
 
 PID_FILE = unified_icc_dir() / "gateway.pid"
 SOCKET_PATH = unified_icc_dir() / "gateway.sock"
@@ -64,7 +64,7 @@ async def _handle_session_list() -> list[dict[str, Any]]:
     if _gateway is None:
         return []
     # Use tmux_manager directly to list actual tmux windows
-    from unified_icc.tmux_manager import tmux_manager
+    from unified_icc.tmux.tmux_manager import tmux_manager
     tmux_windows = await tmux_manager.list_windows()
     return [
         {
@@ -93,10 +93,10 @@ async def _handle_session_create(
         mode=mode,
     )
     if name:
-        from unified_icc.tmux_manager import tmux_manager
+        from unified_icc.tmux.tmux_manager import tmux_manager
         await tmux_manager.rename_window(window.window_id, name)
     # Register in window_store so gateway.list_windows() works
-    from unified_icc.window_state_store import window_store
+    from unified_icc.tmux.window_state_store import window_store
     state = window_store.get_window_state(window.window_id)
     state.provider_name = provider
     state.cwd = workspace
@@ -110,14 +110,14 @@ async def _handle_session_create(
 
 
 async def _handle_session_kill(session_id: str) -> None:
-    from unified_icc.tmux_manager import tmux_manager
+    from unified_icc.tmux.tmux_manager import tmux_manager
     await tmux_manager.kill_window(session_id)
 
 
 async def _handle_session_status(session_id: str | None = None) -> list[dict[str, Any]]:
     if _gateway is None:
         return []
-    from unified_icc.tmux_manager import tmux_manager
+    from unified_icc.tmux.tmux_manager import tmux_manager
     if session_id:
         try:
             pane = await tmux_manager.capture_pane(session_id)

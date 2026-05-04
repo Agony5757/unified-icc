@@ -1,4 +1,4 @@
-from unified_icc.terminal_parser import extract_interactive_content
+from unified_icc.tmux.terminal_parser import extract_interactive_content
 
 
 def test_extract_permission_prompt_for_create_file() -> None:

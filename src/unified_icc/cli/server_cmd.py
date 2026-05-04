@@ -13,7 +13,7 @@ import time
 import typer
 from rich.console import Console
 from rich.table import Table
-from unified_icc.utils import unified_icc_dir
+from unified_icc.utils.utils import unified_icc_dir
 
 console = Console()
 app = typer.Typer(help="Manage the unified-icc API server.", no_args_is_help=True)

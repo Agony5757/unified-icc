@@ -10,10 +10,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from unified_icc.channel_router import channel_router
-from unified_icc.gateway import UnifiedICC, WindowInfo
+from unified_icc.core.channel_router import channel_router
+from unified_icc.core.gateway import UnifiedICC, WindowInfo
 from unified_icc.providers import registry as provider_registry
-from unified_icc.window_state_store import window_store
+from unified_icc.tmux.window_state_store import window_store
 
 from ..auth import verify_api_key
 
@@ -110,7 +110,7 @@ async def create_session(req: CreateSessionRequest) -> dict[str, Any]:
     gateway.bind_channel(channel_id, window.window_id)
 
     if req.name:
-        from unified_icc.tmux_manager import tmux_manager
+        from unified_icc.tmux.tmux_manager import tmux_manager
         await tmux_manager.rename_window(window.window_id, req.name)
 
     # Persist metadata in window_store (same pattern as daemon.py)

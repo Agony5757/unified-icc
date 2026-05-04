@@ -1,11 +1,10 @@
 import pytest
 from types import SimpleNamespace
 
-from unified_icc.gateway import UnifiedICC
-from unified_icc.monitor_events import NewMessage
-from unified_icc.session_monitor import SessionMonitor, get_active_monitor
-from unified_icc.tmux_manager import TmuxWindow, tmux_manager
-from unified_icc.window_state_store import window_store
+from unified_icc import UnifiedICC, window_store
+from unified_icc.events import NewMessage
+from unified_icc.core import SessionMonitor, get_active_monitor
+from unified_icc.tmux import TmuxWindow, tmux_manager
 
 
 @pytest.mark.asyncio
@@ -534,7 +533,7 @@ async def test_list_orphaned_agent_windows_detects_multiple_providers(monkeypatc
 
 @pytest.mark.asyncio
 async def test_on_new_window_uses_event_provider(monkeypatch) -> None:
-    from unified_icc.monitor_events import NewWindowEvent
+    from unified_icc.events import NewWindowEvent
 
     window_store.reset()
     gateway = UnifiedICC()
