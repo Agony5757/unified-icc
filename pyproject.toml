@@ -39,6 +39,11 @@ docs = [
     "myst-parser>=4.0",
     "sphinx-autodoc-typehints>=2.0",
 ]
+server = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "websockets>=13.0",
+]
 
 [build-system]
 requires = ["hatchling"]

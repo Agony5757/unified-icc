@@ -13,6 +13,7 @@ Unified ICC extracts the core logic of [ccgram](https://github.com/alexei-led/cc
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
+- [API Server](#api-server)
 - [Module Reference](#module-reference)
 - [FrontendAdapter Protocol](#frontendadapter-protocol)
 - [Event Types](#event-types)
@@ -30,6 +31,7 @@ Unified ICC extracts the core logic of [ccgram](https://github.com/alexei-led/cc
 ```
 Feishu (cclark)  →  unified-icc gateway  →  tmux  →  AI agent (Claude/Codex/Gemini/Pi/Shell)
 Telegram (ccgram)→  unified-icc gateway  →  tmux  →  AI agent
+HTTP/WS client   →  unified-icc API server  →  tmux  →  AI agent
 ...any frontend  →  unified-icc gateway  →  tmux  →  AI agent
 ```
 
@@ -106,6 +108,7 @@ The gateway (`UnifiedICC`) owns tmux windows and routes messages between channel
 | **SessionMap** | `session_map.py` | Reads Claude hook-written `session_map.json` |
 | **Providers** | `providers/` | ProviderRegistry + per-provider startup commands, transcript parsing, capability flags |
 | **FrontendAdapter** | `adapter.py` | Protocol definition; unified-icc is frontend-agnostic |
+| **API Server** | `server/` | FastAPI HTTP/WebSocket server exposing the gateway as an API |
 
 ---
 
@@ -184,6 +187,130 @@ gateway.list_orphaned_agent_windows()  # Live tmux windows not in state
 
 ---
 
+## API Server
+
+Unified ICC can run as a standalone HTTP/WebSocket server, exposing AI agents via a REST + WebSocket API. This allows any HTTP client (curl, SDK, web UI, custom scripts) to create and interact with agent sessions without a messaging frontend.
+
+### Installation
+
+```bash
+uv sync --extra server
+```
+
+### Starting the Server
+
+```bash
+# Foreground
+unified-icc server start --port 8900
+
+# Background (detached)
+unified-icc server start --port 8900 --detach
+
+# Check status
+unified-icc server status
+
+# Stop
+unified-icc server stop
+```
+
+### REST Endpoints
+
+All endpoints are prefixed with `/api/v1`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/sessions` | Create agent session. Body: `{work_dir, provider, mode}` |
+| `GET` | `/sessions` | List all sessions |
+| `GET` | `/sessions/{channel_id}` | Get session status |
+| `DELETE` | `/sessions/{channel_id}` | Close session |
+| `POST` | `/sessions/{channel_id}/input` | Send text input. Body: `{text, enter?, literal?, raw?}` |
+| `POST` | `/sessions/{channel_id}/key` | Send special key. Body: `{key}` |
+| `GET` | `/sessions/{channel_id}/pane` | Capture pane text |
+| `GET` | `/sessions/{channel_id}/screenshot` | Capture pane screenshot (PNG) |
+| `POST` | `/sessions/{channel_id}/verbose` | Toggle verbose mode |
+| `POST` | `/directories/browse` | List subdirectories. Body: `{path}` |
+| `GET` | `/health` | Health check |
+
+#### Quick Example
+
+```bash
+# Create a Claude session
+curl -X POST http://localhost:8900/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"work_dir": "/tmp/project", "provider": "claude", "mode": "normal"}'
+# → {"channel_id": "api:a1b2c3d4-...", "window_id": "@3", ...}
+
+# Send input
+curl -X POST http://localhost:8900/api/v1/sessions/api:a1b2c3d4-.../input \
+  -H "Content-Type: application/json" \
+  -d '{"text": "explain this codebase"}'
+
+# List sessions
+curl http://localhost:8900/api/v1/sessions
+
+# Capture pane
+curl http://localhost:8900/api/v1/sessions/api:a1b2c3d4-.../pane
+
+# Close session
+curl -X DELETE http://localhost:8900/api/v1/sessions/api:a1b2c3d4-...
+```
+
+### WebSocket Streaming
+
+Connect to `ws://localhost:8900/api/v1/ws/{channel_id}` to receive real-time agent output and status events. Omit `channel_id` for a global listener.
+
+**Client → Server messages** (JSON with `type` field):
+
+```jsonc
+{"type": "session.create", "work_dir": "/tmp", "provider": "claude", "mode": "normal"}
+{"type": "input", "text": "hello", "enter": true, "literal": true}
+{"type": "key", "key": "Escape"}
+{"type": "capture.pane"}
+{"type": "session.list"}
+{"type": "session.close", "channel_id": "api:..."}
+{"type": "ping"}
+```
+
+**Server → Client messages**:
+
+```jsonc
+{"type": "session.created", "channel_id": "api:...", "window_id": "@3", "provider": "claude", ...}
+{"type": "agent.message", "channel_id": "api:...", "messages": [{"text": "...", "role": "assistant", "content_type": "text", "is_complete": true}]}
+{"type": "agent.status", "channel_id": "api:...", "status": "working", "display_label": "Thinking..."}
+{"type": "agent.status", "channel_id": "api:...", "status": "interactive", "interactive": true}
+{"type": "window.change", "window_id": "@3", "change_type": "new", "provider": "claude"}
+{"type": "hook.event", "window_id": "@3", "event_type": "SessionStart", ...}
+{"type": "pong"}
+{"type": "error", "message": "..."}
+```
+
+All messages support an optional `request_id` field for request-response correlation.
+
+### Authentication
+
+Set `ICC_API_KEY` to enable API key authentication:
+
+```bash
+export ICC_API_KEY=sk-your-secret-key
+unified-icc server start
+```
+
+- REST: `Authorization: Bearer sk-your-secret-key` header
+- WebSocket: `?token=sk-your-secret-key` query parameter
+
+When `ICC_API_KEY` is not set, authentication is disabled (for local development).
+
+### Relationship to the Unix Socket Daemon
+
+The API server and the existing Unix socket daemon (`unified-icc gateway start`) are **parallel** ways to run the gateway. They share the same tmux session and cannot run simultaneously. Choose based on use case:
+
+| Mode | Command | Use case |
+|------|---------|----------|
+| Unix socket daemon | `unified-icc gateway start` | CLI scripting, `unified-icc session` commands |
+| API server | `unified-icc server start` | HTTP clients, web UIs, programmatic access |
+
+---
+
 ## Module Reference
 
 ### `gateway.py` — UnifiedICC
@@ -216,6 +343,33 @@ Key methods:
 | `list_windows()` | List all managed tmux windows |
 | `get_channel(channel_id)` | Look up window_id for a channel |
 | `list_orphaned_agent_windows()` | Live tmux windows with Claude/agent running but not tracked in state |
+
+### `server/` — API Server
+
+Standalone HTTP/WebSocket server that owns a `UnifiedICC` instance and exposes it via FastAPI.
+
+```python
+from unified_icc.server import create_app, run_server
+
+# Programmatic start
+run_server(host="0.0.0.0", port=8900)
+
+# Or get the ASGI app for custom deployment
+app = create_app()
+```
+
+Internal structure:
+
+| File | Role |
+|------|------|
+| `app.py` | FastAPI app factory, gateway lifecycle (`lifespan`), callback wiring |
+| `auth.py` | API key authentication (Bearer token + WS query param) |
+| `connection_manager.py` | WebSocket connection tracking per channel_id |
+| `ws_protocol.py` | JSON message type definitions (dataclasses) |
+| `routes/sessions.py` | REST endpoints: CRUD, input, pane capture, browse |
+| `routes/ws.py` | WebSocket endpoint: bidirectional message dispatch |
+
+The server generates channel IDs with the `api:` prefix (e.g. `api:a1b2c3d4-e5f6-...`). These are opaque strings compatible with `ChannelRouter`.
 
 ### `channel_router.py` — ChannelRouter
 
@@ -529,6 +683,9 @@ Records which tmux windows were created by cclark (vs. existing windows). Used f
 # Start the gateway daemon (long-running process)
 unified-icc gateway start
 
+# Start the API server (HTTP + WebSocket)
+unified-icc server start --port 8900
+
 # List active windows
 unified-icc session list
 
@@ -567,6 +724,11 @@ export TMUX_SESSION_NAME=cclark
 # Monitor poll interval in seconds (default: 1.0)
 export MONITOR_POLL_INTERVAL=1.0
 
+# API server (default: disabled)
+export ICC_API_HOST=0.0.0.0
+export ICC_API_PORT=8900
+export ICC_API_KEY=              # Set to enable authentication
+
 # Log level (default: INFO)
 export RUST_LOG=info
 ```
@@ -584,6 +746,7 @@ See `unified_icc.config` for the full `GatewayConfig` dataclass.
 | [design/module-adapter-layer.md](design/module-adapter-layer.md) | FrontendAdapter protocol, UI components |
 | [design/module-card-renderer.md](design/module-card-renderer.md) | Card rendering and verbose mode |
 | [design/module-feishu-frontend.md](design/module-feishu-frontend.md) | Feishu-specific integration |
+| [design/module-api-server.md](design/module-api-server.md) | HTTP/WebSocket API server architecture |
 | [design/module-mvp.md](design/module-mvp.md) | MVP scope and implementation plan |
 | `design/module-tmux-manager.md` | TmuxManager and window lifecycle (TBD) |
 | `design/module-session-monitor.md` | Poll loop and event dispatch (TBD) |

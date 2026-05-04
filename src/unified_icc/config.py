@@ -74,6 +74,11 @@ class GatewayConfig:
             "CCLARK_PROVIDER", "CCGRAM_PROVIDER", "CCBOT_PROVIDER", default="claude"
         )
 
+        # API server
+        self.api_host = os.getenv("ICC_API_HOST", "0.0.0.0")
+        self.api_port = int(os.getenv("ICC_API_PORT", "8900"))
+        self.api_key = os.getenv("ICC_API_KEY", "")
+
         # Autoclose
         self.autoclose_done_minutes = int(os.getenv("AUTOCLOSE_DONE_MINUTES", "30"))
         self.autoclose_dead_minutes = int(os.getenv("AUTOCLOSE_DEAD_MINUTES", "10"))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from unified_icc.cli import gateway_cmd, session_cmd, provider_cmd, config_cmd
+from unified_icc.cli import gateway_cmd, session_cmd, provider_cmd, config_cmd, server_cmd
 
 app = typer.Typer(
     name="unified-icc",
@@ -17,6 +17,7 @@ app.add_typer(gateway_cmd.app, name="gateway")
 app.add_typer(session_cmd.app, name="session")
 app.add_typer(provider_cmd.app, name="provider")
 app.add_typer(config_cmd.app, name="config")
+app.add_typer(server_cmd.app, name="server")
 
 
 @app.callback(invoke_without_command=True)
