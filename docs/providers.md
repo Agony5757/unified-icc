@@ -33,7 +33,7 @@ class ProviderCapabilities:
     supports_plan_mode: bool       # Plan mode 集成
     supports_hooks: bool           # Hook 事件
     supports_yolo: bool           # --dangerously-skip-permissions
-    supports_idle_timeout: bool     # 空闲检测
+    supports_idle_timeout: bool    # 空闲检测
     supports_subagent_tracking: bool # 子任务跟踪
 ```
 

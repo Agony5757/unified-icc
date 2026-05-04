@@ -149,7 +149,7 @@ class InteractivePrompt:
     description: str
     options: list[str] = []    # ask_user 选项列表
     detail: str = ""           # permission 详情
-    plan_text: str = ""       # plan_mode 计划文本
+    plan_text: str = ""        # plan_mode 计划文本
 ```
 
 ## WebSocket 扩展

@@ -49,8 +49,8 @@ await gateway.send_to_window(window_id, text, enter=True)
 
 # 事件回调
 gateway.on_message(callback)      # AgentMessageEvent
-gateway.on_status(callback)        # StatusEvent
-gateway.on_hook(callback)          # HookEvent
+gateway.on_status(callback)      # StatusEvent
+gateway.on_hook(callback)        # HookEvent
 gateway.on_window_change(callback) # WindowChangeEvent
 ```
 

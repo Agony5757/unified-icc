@@ -121,4 +121,3 @@ truncate -s 0 ~/.unified-icc/events.jsonl
 ## 寻求帮助
 
 - 查看 [GitHub Issues](https://github.com/Agony5757/unified-icc/issues)
-- 查看 [设计文档](../design/)
