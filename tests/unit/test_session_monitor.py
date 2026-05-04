@@ -7,7 +7,6 @@ from unified_icc.monitor_events import SessionInfo
 from unified_icc.monitor_state import TrackedSession
 from unified_icc.session_monitor import (
     SessionMonitor,
-    _accept_codex_trust_prompt,
     _is_claude_trust_workspace_prompt,
     _is_codex_trust_prompt,
     _wait_for_agent_pane,
