@@ -21,18 +21,11 @@ Unified ICC 将 `ccgram <https://github.com/alexei-led/ccgram>`_ 的核心逻辑
    :maxdepth: 2
    :caption: 目录
 
-   getting-started/index
-   getting-started/installation
-   getting-started/first-steps
+   getting-started
    architecture
-   providers/index
-   api-reference/index
-   api-reference/gateway
-   api-reference/adapter
-   api-reference/events
-   api-reference/channel-router
-   api-reference/call-stacks
-   events/index
+   providers
+   api-reference
+   events
    configuration
    troubleshooting
    contributing
