@@ -8,38 +8,42 @@ from unified_icc.providers.registry import ProviderRegistry, UnknownProviderErro
 
 
 class DummyProvider(AgentProvider):
-    capabilities = ProviderCapabilities(
-        name="dummy",
-        launch_command="dummy",
-        supports_resume=False,
-        supports_continue=False,
-        supports_structured_transcript=False,
-        supports_incremental_read=False,
-        transcript_format="",
-        supports_hook=True,
-        supports_status_snapshot=False,
-        builtin_commands=[],
-    )
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            name="dummy",
+            launch_command="dummy",
+            supports_resume=False,
+            supports_continue=False,
+            supports_structured_transcript=False,
+            supports_incremental_read=False,
+            transcript_format="jsonl",
+            supports_hook=True,
+            supports_status_snapshot=False,
+            builtin_commands=(),
+        )
 
-    def detect_from_pane_title(self, command: str, title: str) -> bool:
+    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:
         return False
 
 
 class AnotherProvider(AgentProvider):
-    capabilities = ProviderCapabilities(
-        name="another",
-        launch_command="another",
-        supports_resume=False,
-        supports_continue=False,
-        supports_structured_transcript=False,
-        supports_incremental_read=False,
-        transcript_format="",
-        supports_hook=True,
-        supports_status_snapshot=False,
-        builtin_commands=[],
-    )
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            name="another",
+            launch_command="another",
+            supports_resume=False,
+            supports_continue=False,
+            supports_structured_transcript=False,
+            supports_incremental_read=False,
+            transcript_format="jsonl",
+            supports_hook=True,
+            supports_status_snapshot=False,
+            builtin_commands=(),
+        )
 
-    def detect_from_pane_title(self, command: str, title: str) -> bool:
+    def detect_from_pane_title(self, pane_current_command: str, pane_title: str) -> bool:
         return False
 
 

@@ -62,12 +62,15 @@ def get_provider() -> AgentProvider:
     global _active
     if _active is None:
         _ensure_registered()
-        from unified_icc.config import config
-
+        name = (
+            os.environ.get("CCLARK_PROVIDER")
+            or os.environ.get("CCGRAM_PROVIDER")
+            or os.environ.get("CCBOT_PROVIDER", "claude")
+        )
         try:
-            _active = registry.get(config.provider_name)
+            _active = registry.get(name)
         except UnknownProviderError:
-            logger.warning("Unknown provider %r, falling back to 'claude'", config.provider_name)
+            logger.warning("Unknown provider %r, falling back to 'claude'", name)
             _active = registry.get("claude")
     return _active
 
