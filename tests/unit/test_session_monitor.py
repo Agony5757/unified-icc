@@ -388,6 +388,7 @@ async def test_check_for_updates_skips_unbound_tracked_sessions_when_current_map
 
         assert result == []
         assert calls == []
+        assert monitor.state.get_session("sid-orphan") is None
     finally:
         window_store.reset()
 

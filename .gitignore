@@ -45,3 +45,9 @@ Thumbs.db
 
 # Local env
 .env
+
+# Local E2E plans/logs may contain real Feishu chat IDs or app details
+e2e-test-plan.md
+test-plan*.md
+test-error.md
+debug-log/

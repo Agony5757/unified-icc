@@ -1,6 +1,8 @@
 import os
 
-os.environ.setdefault("UNIFIED_ICC_DIR", "/tmp/unified-icc-test-config")
+# Don't override UNIFIED_ICC_DIR for e2e tests
+if "UNIFIED_ICC_DIR" not in os.environ and "tests/e2e" not in os.environ.get("PYTEST_CURRENT_TEST", ""):
+    os.environ.setdefault("UNIFIED_ICC_DIR", "/tmp/unified-icc-test-config")
 
 import pytest
 

@@ -13,11 +13,14 @@ from typing import Any
 from unified_icc import UnifiedICC
 from unified_icc.providers import detect_provider_from_command
 from unified_icc.utils.utils import unified_icc_dir
+from unified_icc.channels import ChannelRegistry
 
 PID_FILE = unified_icc_dir() / "gateway.pid"
 SOCKET_PATH = unified_icc_dir() / "gateway.sock"
 
 _gateway: UnifiedICC | None = None
+_gateway_map: dict[str, UnifiedICC] = {}
+_channel_registry: ChannelRegistry | None = None
 _shutdown_event: asyncio.Event | None = None
 
 
@@ -226,8 +229,12 @@ async def run_daemon(*, verbose: bool = False) -> None:
     async def _cleanup() -> None:
         server.close()
         await server.wait_closed()
-        if _gateway:
-            await _gateway.stop()
+        # Stop channel backends first
+        if _channel_registry:
+            await _channel_registry.stop_all()
+        # Then stop all gateways
+        for gateway in _gateway_map.values():
+            await gateway.stop()
         remove_pid()
         SOCKET_PATH.unlink(missing_ok=True)
         if verbose:
@@ -237,7 +244,7 @@ async def run_daemon(*, verbose: bool = False) -> None:
     shutdown_event = asyncio.Event()
     _shutdown_event = shutdown_event
 
-    async def _on_signal(sig: int) -> None:
+    def _on_signal(sig: int) -> None:
         sys.stderr.write(f"[daemon] signal {sig}, shutting down...\n")
         shutdown_event.set()
 
@@ -245,8 +252,28 @@ async def run_daemon(*, verbose: bool = False) -> None:
         loop.add_signal_handler(sig, lambda s=sig: _on_signal(s))
 
     try:
+        # Load config and create channel registry
+        from unified_icc.utils.config import unified_config
+
+        global _channel_registry, _gateway_map
+
+        # Create the main gateway (for CLI/unix socket commands)
         _gateway = UnifiedICC()
         await _gateway.start()
+        _gateway_map["main"] = _gateway
+
+        # Start channel backends if configured
+        _channel_registry = ChannelRegistry()
+
+        if unified_config.feishu and unified_config.feishu.apps:
+            from unified_icc.channels.feishu import FeishuChannel
+            feishu_channel = FeishuChannel(unified_config.feishu.apps)
+            _channel_registry.register("feishu", feishu_channel)
+
+            # Start all channels (creates additional gateways per tmux session)
+            channel_gateways = await _channel_registry.start_all()
+            _gateway_map.update(channel_gateways)
+
         if verbose:
             sys.stderr.write(f"[daemon] started, PID {os.getpid()}\n")
 

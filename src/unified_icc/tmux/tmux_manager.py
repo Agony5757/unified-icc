@@ -30,7 +30,11 @@ from libtmux.exc import LibTmuxException
 
 from ..utils.config import config
 from ..utils.topic_state_registry import topic_state
-from ..tmux.window_resolver import EMDASH_SESSION_PREFIX as _EMDASH_PREFIX, is_foreign_window
+from ..tmux.window_resolver import (
+    EMDASH_SESSION_PREFIX as _EMDASH_PREFIX,
+    is_foreign_window,
+    is_window_id,
+)
 
 logger = structlog.get_logger()
 
@@ -78,6 +82,21 @@ def reset_vim_state() -> None:
     """Reset all vim state (for testing)."""
     _vim_state.clear()
     _vim_locks.clear()
+
+
+def qualify_window_id(session_name: str, window_id: str) -> str:
+    """Return a globally unique window id for a tmux session/window pair."""
+    if is_foreign_window(window_id):
+        return window_id
+    return f"{session_name}:{window_id}"
+
+
+def split_qualified_window_id(window_id: str) -> tuple[str, str] | None:
+    """Split ``session:@N`` window ids. Returns None for plain ``@N`` ids."""
+    if not is_foreign_window(window_id):
+        return None
+    session_name, window_id_part = window_id.rsplit(":", 1)
+    return session_name, window_id_part
 
 
 _TmuxError = (
@@ -134,7 +153,7 @@ class TmuxManager:
         Args:
             session_name: Name of the tmux session to use (default from config)
         """
-        self.session_name = session_name or config.tmux_session_name
+        self.session_name = session_name or config.tmux_session
         self._server: libtmux.Server | None = None
         self._external_cache: list[TmuxWindow] = []
         self._external_cache_expires: float = 0.0
@@ -231,9 +250,12 @@ class TmuxManager:
                         pw = 0
                         ph = 0
 
+                    qualified_id = qualify_window_id(
+                        self.session_name, window.window_id or ""
+                    )
                     windows.append(
                         TmuxWindow(
-                            window_id=window.window_id or "",
+                            window_id=qualified_id,
                             window_name=name,
                             cwd=cwd,
                             pane_current_command=pane_cmd,
@@ -276,11 +298,16 @@ class TmuxManager:
         Returns:
             TmuxWindow if found, None otherwise
         """
-        if is_foreign_window(window_id):
-            return await self._find_foreign_window(window_id)
+        target_id = (
+            qualify_window_id(self.session_name, window_id)
+            if is_window_id(window_id)
+            else window_id
+        )
+        if is_foreign_window(target_id):
+            return await self._find_foreign_window(target_id)
         windows = await self.list_windows()
         for window in windows:
-            if window.window_id == window_id:
+            if window.window_id == target_id:
                 return window
         return None
 
@@ -295,7 +322,7 @@ class TmuxManager:
                 "-t",
                 session_name,
                 "-F",
-                "#{window_id}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{pane_tty}",
+                "#{window_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_width}\t#{pane_height}\t#{pane_tty}",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -312,24 +339,25 @@ class TmuxManager:
         if proc.returncode != 0:
             return None
         for line in stdout.decode().strip().split("\n"):
-            parts = line.split("\t", 5)
+            parts = line.split("\t", 6)
             if parts and parts[0] == window_id_part:
-                cwd = parts[1] if len(parts) > 1 else ""
-                cmd = parts[2] if len(parts) > 2 else ""  # noqa: PLR2004
+                win_name = parts[1] if len(parts) > 1 else ""
+                cwd = parts[2] if len(parts) > 2 else ""  # noqa: PLR2004
+                cmd = parts[3] if len(parts) > 3 else ""  # noqa: PLR2004
                 pw = (
-                    int(parts[3])
-                    if len(parts) > 3 and parts[3].isdigit()  # noqa: PLR2004
-                    else 0
-                )
-                ph = (
                     int(parts[4])
                     if len(parts) > 4 and parts[4].isdigit()  # noqa: PLR2004
                     else 0
                 )
-                tty = parts[5] if len(parts) > 5 else ""  # noqa: PLR2004
+                ph = (
+                    int(parts[5])
+                    if len(parts) > 5 and parts[5].isdigit()  # noqa: PLR2004
+                    else 0
+                )
+                tty = parts[6] if len(parts) > 6 else ""  # noqa: PLR2004
                 return TmuxWindow(
                     window_id=qualified_id,
-                    window_name=session_name.removeprefix(_EMDASH_PREFIX),
+                    window_name=win_name or session_name.removeprefix(_EMDASH_PREFIX),
                     cwd=cwd,
                     pane_current_command=cmd,
                     pane_tty=tty,
@@ -493,6 +521,43 @@ class TmuxManager:
             logger.exception("Unexpected error capturing pane %s", window_id)
             return None
 
+    async def _capture_pane_plain_subprocess(self, window_id: str) -> str | None:
+        """Capture pane text without ANSI escapes via tmux subprocess."""
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "tmux",
+                "capture-pane",
+                "-p",
+                "-t",
+                window_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            async with asyncio.timeout(5.0):
+                stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.warning(
+                    "Failed to capture pane %s: %s",
+                    window_id,
+                    stderr.decode("utf-8", errors="replace"),
+                )
+                return None
+            text = stdout.decode("utf-8", errors="replace").rstrip()
+            return text if text else None
+        except TimeoutError:
+            logger.warning("Capture pane %s timed out", window_id)
+            if proc:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except ProcessLookupError:
+                    pass
+            return None
+        except OSError:
+            logger.exception("Unexpected error capturing pane %s", window_id)
+            return None
+
     async def get_pane_title(self, window_id: str) -> str:
         """Get the terminal title of a window's active pane.
 
@@ -559,7 +624,7 @@ class TmuxManager:
         Foreign windows (emdash) are captured via subprocess instead.
         """
         if is_foreign_window(window_id):
-            return await self._capture_pane_ansi(window_id)
+            return await self._capture_pane_plain_subprocess(window_id)
 
         def _sync_capture() -> str | None:
             session = self.get_session()
@@ -766,7 +831,25 @@ class TmuxManager:
         Foreign windows (emdash) are never killed — they are owned externally.
         """
         if is_foreign_window(window_id):
-            logger.info("Skipping kill for external window %s", window_id)
+            session_name, _window_id_part = window_id.rsplit(":", 1)
+            if session_name.startswith(_EMDASH_PREFIX):
+                logger.info("Skipping kill for external window %s", window_id)
+                return False
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "tmux",
+                    "kill-window",
+                    "-t",
+                    window_id,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.communicate()
+                if proc.returncode == 0:
+                    logger.info("Killed window %s", window_id)
+                    return True
+            except OSError:
+                logger.exception("Failed to kill window %s", window_id)
             return False
 
         def _sync_kill() -> bool:
@@ -1137,10 +1220,10 @@ class TmuxManager:
                 )
 
                 new_window_id = window.window_id or ""
+                qualified_id = qualify_window_id(self.session_name, new_window_id)
                 pane = window.active_pane
 
                 # Set ICC_WINDOW_ID so agents can self-identify
-                qualified_id = f"{self.session_name}:{new_window_id}"
                 if pane and new_window_id:
                     pane.send_keys(
                         f"export ICC_WINDOW_ID={shlex.quote(qualified_id)}",
@@ -1161,14 +1244,14 @@ class TmuxManager:
                 logger.info(
                     "Created window '%s' (id=%s) at %s",
                     final_window_name,
-                    new_window_id,
+                    qualified_id,
                     path,
                 )
                 return (
                     True,
                     f"Created window '{final_window_name}' at {path}",
                     final_window_name,
-                    new_window_id,
+                    qualified_id,
                 )
 
             except _TmuxError as e:
@@ -1190,7 +1273,7 @@ async def send_to_window(
     Returns (success, message). Looks up the display name for logging, then
     delegates to tmux_manager.find_window_by_id + send_keys.
     """
-    from .channel_router import channel_router
+    from unified_icc.core.channel_router import channel_router
 
     display = channel_router.get_display_name(window_id)
     logger.debug(

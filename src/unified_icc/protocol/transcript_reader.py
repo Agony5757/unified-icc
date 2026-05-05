@@ -32,6 +32,7 @@ from ..utils.utils import log_throttle_reset, log_throttled, read_cwd_from_jsonl
 
 if TYPE_CHECKING:
     from ..utils.idle_tracker import IdleTracker
+    from ..tmux.tmux_manager import TmuxManager
 
 logger = structlog.get_logger()
 
@@ -76,11 +77,24 @@ class TranscriptReader:
     Delegates activity recording to IdleTracker (via session_id).
     """
 
-    def __init__(self, state: MonitorState, idle_tracker: IdleTracker) -> None:
+    def __init__(
+        self,
+        state: MonitorState,
+        idle_tracker: IdleTracker,
+        *,
+        tmux_manager: TmuxManager | None = None,
+        owns_window: Any | None = None,
+    ) -> None:
         self._state = state
         self._idle_tracker = idle_tracker
         self._pending_tools: dict[str, dict[str, Any]] = {}
         self._file_mtimes: dict[str, float] = {}
+        if tmux_manager is None:
+            from ..tmux.tmux_manager import tmux_manager as default_tmux_manager
+
+            tmux_manager = default_tmux_manager
+        self._tmux_manager = tmux_manager
+        self._owns_window = owns_window or (lambda _window_id: True)
 
     def clear_session(self, session_id: str) -> None:
         """Remove all per-session state for a cleaned-up session."""
@@ -273,12 +287,13 @@ class TranscriptReader:
 
     async def _get_active_cwds(self) -> set[str]:
         """Get normalized cwds of cclark-created tmux windows only."""
-        from ..tmux.tmux_manager import tmux_manager
         from ..tmux.window_state_store import window_store
 
         cwds: set[str] = set()
-        windows = await tmux_manager.list_windows()
+        windows = await self._tmux_manager.list_windows()
         for w in windows:
+            if not self._owns_window(w.window_id):
+                continue
             if not window_store.is_created_window(w.window_id):
                 continue
             try:

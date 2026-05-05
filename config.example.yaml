@@ -1,0 +1,32 @@
+gateway:
+  tmux_session: unified-icc
+  monitor_poll_interval: 1.0
+  api_host: 0.0.0.0
+  api_port: 8900
+
+channels:
+  feishu:
+    apps:
+      - name: robot1
+        app_id: cli_xxx
+        app_secret: xxx
+        allowed_users: all
+        tmux_session: unified-icc-robot1
+
+      - name: robot2
+        app_id: cli_xxx
+        app_secret: xxx
+        allowed_users: all
+        tmux_session: unified-icc-robot2
+
+      - name: robot3
+        app_id: cli_xxx
+        app_secret: xxx
+        allowed_users: all
+        tmux_session: unified-icc-robot3
+
+      - name: robot4
+        app_id: cli_xxx
+        app_secret: xxx
+        allowed_users: all
+        tmux_session: unified-icc-robot4

@@ -20,7 +20,11 @@ from ..providers import resolve_launch_command
 from .session import session_manager
 from .session_monitor import SessionMonitor, extract_session_id_from_status
 from ..state.state_persistence import StatePersistence
-from ..tmux.tmux_manager import send_to_window as _send_to_window, tmux_manager
+from ..tmux.tmux_manager import (
+    TmuxManager,
+    split_qualified_window_id,
+    tmux_manager as default_tmux_manager,
+)
 from ..tmux.window_state_store import window_store
 
 logger = structlog.get_logger()
@@ -55,6 +59,11 @@ class UnifiedICC:
 
     def __init__(self, gateway_config: GatewayConfig | None = None) -> None:
         self._config = gateway_config or config
+        self._tmux_manager = (
+            default_tmux_manager
+            if gateway_config is None or gateway_config is config
+            else TmuxManager(session_name=self._config.tmux_session)
+        )
         self.channel_router = channel_router
         self._monitor: SessionMonitor | None = None
         self._persistence: StatePersistence | None = None
@@ -65,13 +74,19 @@ class UnifiedICC:
         self._hook_callbacks: list[Callable[[HookEvent], Any]] = []
         self._window_change_callbacks: list[Callable[[WindowChangeEvent], Any]] = []
 
+    def _owns_window_id(self, window_id: str) -> bool:
+        qualified = split_qualified_window_id(window_id)
+        if qualified:
+            return qualified[0] == self._tmux_manager.session_name
+        return self._tmux_manager.session_name == config.tmux_session
+
     async def start(self) -> None:
         """Start the gateway: connect to tmux, load state, begin monitoring."""
-        logger.info("Starting UnifiedICC gateway", session=self._config.tmux_session_name)
+        logger.info("Starting UnifiedICC gateway", session=self._config.tmux_session)
 
         # Connect to tmux session
-        tmux_manager.ensure_session()
-        self._config.own_window_id = tmux_manager.own_window_id
+        self._tmux_manager.ensure_session()
+        self._config.own_window_id = self._tmux_manager.own_window_id
 
         # Wire singletons
         session_manager._wire_singletons()
@@ -83,7 +98,10 @@ class UnifiedICC:
         await self._startup_cleanup()
 
         # Start session monitor
-        self._monitor = SessionMonitor()
+        self._monitor = SessionMonitor(
+            tmux_manager=self._tmux_manager,
+            gateway_config=self._config,
+        )
         from .session_monitor import set_active_monitor
 
         set_active_monitor(self._monitor)
@@ -122,7 +140,7 @@ class UnifiedICC:
         """Create a new tmux window running an agent."""
         approval_mode = "normal" if mode == "standard" else mode
         command = resolve_launch_command(provider, approval_mode=approval_mode)
-        _success, _msg, _name, window_id = await tmux_manager.create_window(
+        _success, _msg, _name, window_id = await self._tmux_manager.create_window(
             work_dir=work_dir,
             launch_command=command,
             agent_args="",
@@ -140,7 +158,7 @@ class UnifiedICC:
         channel_router.unbind_window(window_id, kill=False)
         window_store.remove_created_window(window_id)
         window_store.remove_window(window_id)
-        await tmux_manager.kill_window(window_id)
+        await self._tmux_manager.kill_window(window_id)
         logger.info("Killed window %s", window_id)
 
     async def kill_channel_windows(self, channel_id: str) -> list[str]:
@@ -164,12 +182,24 @@ class UnifiedICC:
         """List live agent tmux windows that are not monitored by cclark state."""
         from ..providers import detect_provider_from_command
 
-        bound_wids = channel_router.bound_window_ids()
-        state_wids = set(window_store.iter_window_ids())
-        managed_wids = bound_wids | state_wids | window_store.get_created_windows()
+        bound_wids = {
+            wid for wid in channel_router.bound_window_ids() if self._owns_window_id(wid)
+        }
+        state_wids = {
+            wid for wid in window_store.iter_window_ids() if self._owns_window_id(wid)
+        }
+        managed_wids = (
+            bound_wids
+            | state_wids
+            | {
+                wid
+                for wid in window_store.get_created_windows()
+                if self._owns_window_id(wid)
+            }
+        )
         orphans: list[WindowInfo] = []
 
-        for window in await tmux_manager.list_windows():
+        for window in await self._tmux_manager.list_windows():
             if window.window_id in managed_wids:
                 continue
             provider = detect_provider_from_command(window.pane_current_command)
@@ -189,6 +219,8 @@ class UnifiedICC:
         """List tmux windows created by cclark (guarded by is_created_window)."""
         windows = []
         for wid in window_store.iter_window_ids():
+            if not self._owns_window_id(wid):
+                continue
             if not window_store.is_created_window(wid):
                 continue
             state = window_store.get_window_state(wid)
@@ -205,7 +237,19 @@ class UnifiedICC:
 
     async def send_to_window(self, window_id: str, text: str) -> None:
         """Send text input to a tmux window."""
-        await _send_to_window(window_id, text)
+        display = channel_router.get_display_name(window_id)
+        logger.debug(
+            "send_to_window: window_id=%s (%s), text_len=%d",
+            window_id,
+            display,
+            len(text),
+        )
+        window = await self._tmux_manager.find_window_by_id(window_id)
+        if not window:
+            raise RuntimeError("Window not found (may have been closed)")
+        success = await self._tmux_manager.send_keys(window.window_id, text)
+        if not success:
+            raise RuntimeError("Failed to send keys")
 
     async def send_input_to_window(
         self,
@@ -217,7 +261,7 @@ class UnifiedICC:
         raw: bool = False,
     ) -> None:
         """Send text or key input to a tmux window with explicit Enter control."""
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id,
             text,
             enter=enter,
@@ -227,17 +271,17 @@ class UnifiedICC:
 
     async def send_key(self, window_id: str, key: str) -> None:
         """Send a special key to a tmux window."""
-        await tmux_manager.send_keys(window_id, key, enter=False, literal=False)
+        await self._tmux_manager.send_keys(window_id, key, enter=False, literal=False)
 
     # ── Output capture ─────────────────────────────────────────────────
 
     async def capture_pane(self, window_id: str) -> str:
         """Capture the current pane content."""
-        return await tmux_manager.capture_pane(window_id) or ""
+        return await self._tmux_manager.capture_pane(window_id) or ""
 
     async def capture_screenshot(self, window_id: str) -> bytes:
         """Capture a screenshot of the pane as PNG bytes."""
-        return await tmux_manager.capture_screenshot(window_id)
+        return await self._tmux_manager.capture_screenshot(window_id)
 
     # ── Event subscription ─────────────────────────────────────────────
 
@@ -267,6 +311,14 @@ class UnifiedICC:
     def resolve_channels(self, window_id: str) -> list[str]:
         return channel_router.resolve_channels(window_id)
 
+    async def detect_session_id(self, window_id: str) -> str | None:
+        """Actively query this gateway's monitor for a window session id."""
+        if not self._monitor:
+            return None
+        if not self._owns_window_id(window_id):
+            return None
+        return await self._monitor.detect_session_id(window_id)
+
     # ── Provider management ────────────────────────────────────────────
 
     def get_provider(self, window_id: str) -> Any:
@@ -289,12 +341,18 @@ class UnifiedICC:
         """
         from ..providers import detect_provider_from_command
 
-        bound_wids = self.channel_router.bound_window_ids()
-        live_windows = await tmux_manager.list_windows()
+        bound_wids = {
+            wid
+            for wid in self.channel_router.bound_window_ids()
+            if self._owns_window_id(wid)
+        }
+        live_windows = await self._tmux_manager.list_windows()
         live_by_id = {w.window_id: w for w in live_windows}
         live_window_ids = set(live_by_id)
 
         for wid in list(window_store.get_created_windows()):
+            if not self._owns_window_id(wid):
+                continue
             if wid not in live_window_ids or (
                 not window_store.has_window(wid) and wid not in bound_wids
             ):
@@ -330,6 +388,8 @@ class UnifiedICC:
             window_store.mark_window_created(wid)
 
         for wid in list(window_store.iter_window_ids()):
+            if not self._owns_window_id(wid):
+                continue
             if wid in bound_wids:
                 continue
 
@@ -341,7 +401,7 @@ class UnifiedICC:
             )
             logger.info("Startup cleanup: killing orphaned window %s (%s)", wid, state_desc)
             try:
-                await tmux_manager.kill_window(wid)
+                await self._tmux_manager.kill_window(wid)
             except Exception:
                 logger.exception("Failed to kill orphaned window %s", wid)
             window_store.remove_window(wid)
@@ -350,6 +410,8 @@ class UnifiedICC:
     async def _on_new_message(self, msg: NewMessage) -> None:
         # session_id → window_id → channel_ids
         window_id = window_store.find_window_by_session(msg.session_id) or ""
+        if window_id and not self._owns_window_id(window_id):
+            return
         channels = channel_router.resolve_channels(window_id)
         from typing import cast
         from ..providers.base import AgentMessage, MessageRole, ContentType
@@ -389,7 +451,11 @@ class UnifiedICC:
                 logger.exception("Window change callback error")
 
     async def _on_hook_event(self, event: Any) -> None:
-        wid = window_store.find_window_by_session(event.session_id) or ""
+        wid = getattr(event, "window_key", "") or window_store.find_window_by_session(
+            event.session_id
+        ) or ""
+        if wid and not self._owns_window_id(wid):
+            return
         hook_evt = HookEvent(
             window_id=wid,
             event_type=event.event_type,

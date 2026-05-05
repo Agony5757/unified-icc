@@ -24,15 +24,20 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from ..utils.config import config
+from ..utils.config import GatewayConfig, config
 from ..events.event_reader import read_new_events
 from ..utils.idle_tracker import IdleTracker
 from ..state.monitor_state import MonitorState
 from ..providers import detect_provider_from_command, get_provider_for_window, registry  # noqa: F401 (used by test patches)
 from ..providers.base import StatusUpdate
 from ..state.session_map import parse_session_map
-from .session_lifecycle import session_lifecycle
-from ..tmux.tmux_manager import tmux_manager
+from .session_lifecycle import SessionLifecycle
+from ..tmux.tmux_manager import (
+    TmuxManager,
+    qualify_window_id,
+    split_qualified_window_id,
+    tmux_manager as default_tmux_manager,
+)
 from ..events.monitor_events import NewMessage, NewWindowEvent, SessionInfo
 from ..protocol.transcript_reader import TranscriptReader
 from ..utils.utils import task_done_callback
@@ -71,6 +76,10 @@ _CODEX_TRUST_MARKERS = (
 )
 
 _CODEX_UI_MARKER = "OpenAI Codex"
+_CODEX_STATUS_MARKERS = (
+    "Session:",
+    "Directory:",
+)
 
 logger = structlog.get_logger()
 
@@ -134,7 +143,9 @@ def _is_claude_trust_workspace_prompt(pane_text: str | None) -> bool:
     return not any("$" in line or "command not found" in line for line in trailing)
 
 
-async def _accept_claude_trust_workspace_prompt(window_id: str) -> bool:
+async def _accept_claude_trust_workspace_prompt(
+    window_id: str, tmux_manager: TmuxManager
+) -> bool:
     """Accept Claude's first-run trust prompt for a cclark-created workspace."""
     pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
     if not _is_claude_trust_workspace_prompt(pane_text):
@@ -159,7 +170,9 @@ def _is_codex_trust_prompt(pane_text: str | None) -> bool:
     return all(marker in pane_text for marker in _CODEX_TRUST_MARKERS)
 
 
-async def _accept_codex_trust_prompt(window_id: str) -> bool:
+async def _accept_codex_trust_prompt(
+    window_id: str, tmux_manager: TmuxManager
+) -> bool:
     """Accept Codex's first-run trust prompt for a cclark-created workspace."""
     pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
     if not _is_codex_trust_prompt(pane_text):
@@ -177,17 +190,23 @@ async def _accept_codex_trust_prompt(window_id: str) -> bool:
     return True
 
 
-async def _wait_for_agent_pane(window_id: str, provider_name: str = "claude") -> bool:
+async def _wait_for_agent_pane(
+    window_id: str,
+    tmux_manager: TmuxManager | None = None,
+    provider_name: str = "claude",
+) -> bool:
     """Wait briefly until the target pane is ready for agent slash commands."""
+    if tmux_manager is None:
+        tmux_manager = default_tmux_manager
     provider = registry.get(provider_name) if registry.is_valid(provider_name) else None
     launch_command = provider.capabilities.launch_command if provider else provider_name
 
     deadline = time.monotonic() + _SESSION_ID_PROBE_READY_TIMEOUT
     while time.monotonic() < deadline:
         if provider_name == "codex":
-            await _accept_codex_trust_prompt(window_id)
+            await _accept_codex_trust_prompt(window_id, tmux_manager)
         elif provider_name == "claude":
-            await _accept_claude_trust_workspace_prompt(window_id)
+            await _accept_claude_trust_workspace_prompt(window_id, tmux_manager)
         window = await tmux_manager.find_window_by_id(window_id)
         if not window:
             await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
@@ -202,6 +221,7 @@ async def _wait_for_agent_pane(window_id: str, provider_name: str = "claude") ->
             if pane_text and (
                 _CODEX_UI_MARKER in pane_text
                 or _is_codex_trust_prompt(pane_text)
+                or all(marker in pane_text for marker in _CODEX_STATUS_MARKERS)
             ):
                 is_ready = True
         if is_ready:
@@ -210,13 +230,13 @@ async def _wait_for_agent_pane(window_id: str, provider_name: str = "claude") ->
                 # trust prompt has finished rendering. Give the startup UI one
                 # short settle window, then re-check the pane before probing.
                 await asyncio.sleep(_SESSION_ID_PROBE_CLAUDE_SETTLE_DELAY)
-                if await _accept_claude_trust_workspace_prompt(window_id):
+                if await _accept_claude_trust_workspace_prompt(window_id, tmux_manager):
                     continue
             if provider_name == "codex":
                 # Codex may show a trust prompt after initially appearing ready.
                 # Give it a short settle window, then re-check.
                 await asyncio.sleep(0.3)
-                if await _accept_codex_trust_prompt(window_id):
+                if await _accept_codex_trust_prompt(window_id, tmux_manager):
                     continue
             return True
         await asyncio.sleep(_SESSION_ID_PROBE_READY_INTERVAL)
@@ -236,15 +256,26 @@ class SessionMonitor:
         projects_path: Path | None = None,
         poll_interval: float | None = None,
         state_file: Path | None = None,
+        tmux_manager: TmuxManager | None = None,
+        gateway_config: GatewayConfig | None = None,
     ):
+        self._config = gateway_config or config
+        self._tmux_manager = tmux_manager or default_tmux_manager
+        self._session_lifecycle = SessionLifecycle()
         self.projects_path = (
-            projects_path if projects_path is not None else config.claude_projects_path
+            projects_path
+            if projects_path is not None
+            else self._config.claude_projects_path
         )
         self.poll_interval = (
-            poll_interval if poll_interval is not None else config.monitor_poll_interval
+            poll_interval
+            if poll_interval is not None
+            else self._config.monitor_poll_interval
         )
 
-        self.state = MonitorState(state_file=state_file or config.monitor_state_file)
+        self.state = MonitorState(
+            state_file=state_file or self._monitor_state_file(self._config)
+        )
         self.state.load()
 
         self._running = False
@@ -265,7 +296,28 @@ class SessionMonitor:
         self._hook_event_callback: Callable[[HookEvent], Awaitable[None]] | None = None
 
         self._idle_tracker = IdleTracker()
-        self._transcript_reader = TranscriptReader(self.state, self._idle_tracker)
+        self._transcript_reader = TranscriptReader(
+            self.state,
+            self._idle_tracker,
+            tmux_manager=self._tmux_manager,
+            owns_window=self._owns_window,
+        )
+
+    def _monitor_state_file(self, gateway_config: GatewayConfig) -> Path:
+        """Use one monitor-state file per tmux session to avoid offset sharing."""
+        state_file = gateway_config.monitor_state_file
+        default_session = config.tmux_session
+        if self._tmux_manager.session_name == default_session:
+            return state_file
+        safe_session = re.sub(r"[^A-Za-z0-9_.-]+", "_", self._tmux_manager.session_name)
+        return state_file.with_name(f"{state_file.stem}.{safe_session}{state_file.suffix}")
+
+    def _owns_window(self, window_id: str) -> bool:
+        """Return true when this monitor owns the tmux session for window_id."""
+        qualified = split_qualified_window_id(window_id)
+        if qualified:
+            return qualified[0] == self._tmux_manager.session_name
+        return self._tmux_manager.session_name == config.tmux_session
 
     # ── Session ID active detection ────────────────────────────────────────────
 
@@ -286,7 +338,22 @@ class SessionMonitor:
         """Implementation for detect_session_id; caller must hold the window lock."""
         ws = window_store.get_window_state(window_id)
         provider_name = ws.provider_name or "claude"
-        if not await _wait_for_agent_pane(window_id, provider_name):
+        if provider_name == "codex":
+            pane_text = await self._tmux_manager.capture_pane(
+                window_id, with_ansi=False
+            )
+            session_id = extract_session_id_from_status(pane_text or "")
+            if session_id:
+                if window_store.has_window(window_id) and not ws.session_id:
+                    ws.session_id = session_id
+                    window_store._schedule_save()
+                logger.info("detect_session_id: %s → %s", window_id, session_id)
+                return session_id
+            return None
+
+        if not await _wait_for_agent_pane(
+            window_id, self._tmux_manager, provider_name
+        ):
             logger.warning(
                 "detect_session_id: pane for %s did not become %s before probe",
                 window_id,
@@ -297,37 +364,39 @@ class SessionMonitor:
         # Send /status without the normal TUI workarounds. The regular literal
         # path probes vim insert mode by typing "i", which can pollute Claude's
         # input box when the pane is a Claude TUI rather than vim.
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id, "C-u", enter=False, literal=False, raw=True
         )
-        ok = await tmux_manager.send_keys(
+        ok = await self._tmux_manager.send_keys(
             window_id, "/status", enter=False, literal=True, raw=True
         )
         if not ok:
             logger.warning("detect_session_id: failed to send /status to %s", window_id)
             return None
         await asyncio.sleep(0.5)
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id, "Enter", enter=False, literal=False, raw=True
         )
 
         session_id = None
         for _ in range(10):
             await asyncio.sleep(0.2)
-            pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+            pane_text = await self._tmux_manager.capture_pane(
+                window_id, with_ansi=False
+            )
             session_id = extract_session_id_from_status(pane_text or "")
             if session_id:
                 break
 
         # Dismiss the status view
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id, "Escape", enter=False, literal=False, raw=True
         )
         await asyncio.sleep(0.2)
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id, "Escape", enter=False, literal=False, raw=True
         )
-        await tmux_manager.send_keys(
+        await self._tmux_manager.send_keys(
             window_id, "C-u", enter=False, literal=False, raw=True
         )
         await asyncio.sleep(0.05)
@@ -352,10 +421,14 @@ class SessionMonitor:
         did not fire or session_map.json was empty.
         """
         for wid in window_store.iter_window_ids():
+            if not self._owns_window(wid):
+                continue
             if not window_store.is_created_window(wid):
                 continue
             ws = window_store.get_window_state(wid)
             if ws.session_id:
+                continue
+            if (ws.provider_name or "").lower() == "shell":
                 continue
             now = time.monotonic()
             last_probe = self._last_session_id_probe.get(wid, 0.0)
@@ -375,7 +448,7 @@ class SessionMonitor:
         session_id is still empty.
         """
         wid = window_store.find_window_by_session(session_info.session_id) or ""
-        if wid:
+        if wid and self._owns_window(wid):
             return wid
 
         target_cwd = _normalize_path(session_info.cwd)
@@ -384,6 +457,8 @@ class SessionMonitor:
 
         candidates: list[str] = []
         for window_id in window_store.get_created_windows():
+            if not self._owns_window(window_id):
+                continue
             state = window_store.get_window_state(window_id)
             if state.session_id:
                 continue
@@ -398,11 +473,11 @@ class SessionMonitor:
     # Delegation properties for backward-compatible test access
     @property
     def _last_session_map(self) -> dict:
-        return session_lifecycle.last_session_map
+        return self._session_lifecycle.last_session_map
 
     @_last_session_map.setter
     def _last_session_map(self, value: dict) -> None:
-        session_lifecycle.initialize(value)
+        self._session_lifecycle.initialize(value)
 
     @property
     def _last_activity(self) -> dict:
@@ -449,6 +524,8 @@ class SessionMonitor:
             window_id = getattr(window, "window_id", "")
             if not window_id:
                 continue
+            if not self._owns_window(window_id):
+                continue
             if (
                 not window_store.is_created_window(window_id)
                 and not channel_router.is_window_bound(window_id)
@@ -457,7 +534,9 @@ class SessionMonitor:
 
             ws = window_store.get_window_state(window_id)
             provider = get_provider_for_window(window_id, ws.provider_name or None)
-            pane_text = await tmux_manager.capture_pane(window_id, with_ansi=False)
+            pane_text = await self._tmux_manager.capture_pane(
+                window_id, with_ansi=False
+            )
             update = provider.parse_terminal_status(pane_text or "")
             if update is None or not update.is_interactive:
                 continue
@@ -470,7 +549,9 @@ class SessionMonitor:
 
     def record_hook_activity(self, window_id: str) -> None:
         """Record hook-based activity for a window (resets idle timers)."""
-        session_id = session_lifecycle.resolve_session_id(window_id)
+        if not self._owns_window(window_id):
+            return
+        session_id = self._session_lifecycle.resolve_session_id(window_id)
         if session_id:
             self._idle_tracker.record_activity(session_id)
 
@@ -532,11 +613,16 @@ class SessionMonitor:
                 if session_id in processed_session_ids:
                     continue
                 bound_window_id = window_store.find_window_by_session(session_id) or ""
+                if bound_window_id and not self._owns_window(bound_window_id):
+                    continue
                 if not bound_window_id:
                     logger.debug(
-                        "Skipping unbound tracked session while session_map is empty: %s",
+                        "Removing unbound tracked session while session_map is empty: %s",
                         session_id,
                     )
+                    self._transcript_reader.clear_session(session_id)
+                    self._idle_tracker.clear_session(session_id)
+                    self.state.remove_session(session_id)
                     continue
                 file_path = Path(tracked.file_path)
                 if not file_path.exists():
@@ -557,7 +643,7 @@ class SessionMonitor:
                 state.session_id
                 for wid in window_store.get_created_windows()
                 for state in [window_store.get_window_state(wid)]
-                if state.session_id
+                if self._owns_window(wid) and state.session_id
             }
             missing_bound_session_ids = bound_session_ids - processed_session_ids
             if missing_bound_session_ids:
@@ -571,6 +657,8 @@ class SessionMonitor:
                         or ""
                     )
                     if not bound_window_id:
+                        continue
+                    if not self._owns_window(bound_window_id):
                         continue
                     try:
                         await self._process_session_file(
@@ -592,6 +680,8 @@ class SessionMonitor:
                 for session_id in still_missing:
                     wid = window_store.find_window_by_session(session_id)
                     if not wid:
+                        continue
+                    if not self._owns_window(wid):
                         continue
                     ws = window_store.get_window_state(wid)
                     provider_name = ws.provider_name or "claude"
@@ -633,7 +723,7 @@ class SessionMonitor:
         # cclark dev session gets linked to a real window.
         if (
             not current_map
-            and window_store.get_created_windows()
+            and any(self._owns_window(wid) for wid in window_store.get_created_windows())
             and not self._fallback_scan_done
         ):
             self._fallback_scan_done = True
@@ -696,6 +786,8 @@ class SessionMonitor:
         # until the session is discovered (transient — Codex may need a few
         # seconds to write the first transcript line).
         for wid in window_store.get_created_windows():
+            if not self._owns_window(wid):
+                continue
             ws = window_store.get_window_state(wid)
             if ws.session_id:
                 continue  # already discovered
@@ -772,13 +864,15 @@ class SessionMonitor:
 
         offset_before = self.state.events_offset
         events, new_offset = await read_new_events(
-            config.events_file, self.state.events_offset
+            self._config.events_file, self.state.events_offset
         )
         self.state.events_offset = new_offset
         if new_offset != offset_before:
             self.state._dirty = True
 
         for event in events:
+            if event.window_key and not self._owns_window(event.window_key):
+                continue
             try:
                 await self._hook_event_callback(event)
             except _CallbackError:
@@ -786,13 +880,17 @@ class SessionMonitor:
 
     async def _load_current_session_map(self) -> dict[str, dict[str, str]]:
         """Load current session_map and return window_key -> details mapping."""
-        if config.session_map_file.exists():
+        if self._config.session_map_file.exists():
             try:
-                async with aiofiles.open(config.session_map_file, "r") as f:
+                async with aiofiles.open(self._config.session_map_file, "r") as f:
                     content = await f.read()
                 raw = json.loads(content)
-                prefix = f"{config.tmux_session_name}:"
-                return parse_session_map(raw, prefix)
+                prefix = f"{self._tmux_manager.session_name}:"
+                parsed = parse_session_map(raw, prefix)
+                return {
+                    qualify_window_id(self._tmux_manager.session_name, window_id): details
+                    for window_id, details in parsed.items()
+                }
             except _SessionMapError:
                 pass
         return {}
@@ -817,7 +915,7 @@ class SessionMonitor:
     async def _detect_and_cleanup_changes(self) -> dict[str, dict[str, str]]:
         """Reconcile session_map; clean up replaced/removed sessions; fire new-window events."""
         current_map = await self._load_current_session_map()
-        result = session_lifecycle.reconcile(current_map, self._idle_tracker)
+        result = self._session_lifecycle.reconcile(current_map, self._idle_tracker)
 
         for session_id in result.sessions_to_remove:
             self._transcript_reader.clear_session(session_id)
@@ -850,14 +948,13 @@ class SessionMonitor:
     async def _monitor_loop(self) -> None:
         """Background poll loop."""
         logger.info("Session monitor started, polling every %ss", self.poll_interval)
-        logger.info("Session monitor: about to import session_map_sync")
-
-        from ..state.session_map import session_map_sync
-
-        logger.info("Session monitor loop starting")
+        logger.info(
+            "Session monitor loop starting for tmux session %s",
+            self._tmux_manager.session_name,
+        )
         await self._cleanup_all_stale_sessions()
         initial_map = await self._load_current_session_map()
-        session_lifecycle.initialize(initial_map)
+        self._session_lifecycle.initialize(initial_map)
         logger.info("Session monitor: initial_map has %d entries", len(initial_map))
 
         # Actively query session_ids for windows that don't have one yet.
@@ -869,17 +966,18 @@ class SessionMonitor:
         while self._running:
             try:
                 await self._read_hook_events()
-                await session_map_sync.load_session_map()
 
                 current_map = await self._detect_and_cleanup_changes()
                 await self.detect_missing_session_ids()
 
-                all_windows = await tmux_manager.list_windows()
-                external_windows = await tmux_manager.discover_external_sessions()
-                all_windows = all_windows + external_windows
+                all_windows = await self._tmux_manager.list_windows()
+                external_windows = await self._tmux_manager.discover_external_sessions()
+                all_windows = [
+                    w
+                    for w in all_windows + external_windows
+                    if self._owns_window(w.window_id)
+                ]
                 await self._check_terminal_statuses(all_windows)
-                live_window_ids = {w.window_id for w in all_windows}
-                session_map_sync.prune_session_map(live_window_ids)
                 known_window_ids = set(current_map.keys())
                 for window in all_windows:
                     if window.window_id in known_window_ids:

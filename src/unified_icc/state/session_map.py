@@ -108,7 +108,7 @@ class SessionMapSync:
         except (json.JSONDecodeError, OSError):  # fmt: skip
             return
 
-        prefix = f"{config.tmux_session_name}:"
+        prefix = f"{config.tmux_session}:"
         valid_wids, old_format_sids, old_format_keys, changed = (
             self._process_session_map_entries(session_map, prefix)
         )
@@ -142,13 +142,14 @@ class SessionMapSync:
                 continue
             if not key.startswith(prefix):
                 continue
-            window_id = key[len(prefix) :]
-            if not is_window_id(window_id):
+            window_id_part = key[len(prefix) :]
+            if not is_window_id(window_id_part):
                 sid = info.get("session_id", "")
                 if sid:
                     old_format_sids.add(sid)
                 old_format_keys.append(key)
                 continue
+            window_id = key
             valid_wids.add(window_id)
             if self._sync_window_from_session_map(window_id, info):
                 changed = True
@@ -180,7 +181,7 @@ class SessionMapSync:
 
         Returns True if any states were removed.
         """
-        from .channel_router import channel_router
+        from ..core.channel_router import channel_router
         from ..tmux.window_state_store import window_store
 
         bound_wids = {
@@ -229,7 +230,7 @@ class SessionMapSync:
             window_id,
             timeout,
         )
-        key = f"{config.tmux_session_name}:{window_id}"
+        key = window_id if is_foreign_window(window_id) else f"{config.tmux_session}:{window_id}"
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
         while loop.time() < deadline:
@@ -273,14 +274,14 @@ class SessionMapSync:
         except (json.JSONDecodeError, OSError):  # fmt: skip
             return
 
-        prefix = f"{config.tmux_session_name}:"
+        prefix = f"{config.tmux_session}:"
         dead_entries: list[tuple[str, str]] = []  # (map_key, window_id)
         for key in raw:
             if not key.startswith(prefix):
                 continue
-            window_id = key[len(prefix) :]
-            if is_window_id(window_id) and window_id not in live_window_ids:
-                dead_entries.append((key, window_id))
+            window_id_part = key[len(prefix) :]
+            if is_window_id(window_id_part) and key not in live_window_ids:
+                dead_entries.append((key, key))
 
         if not dead_entries:
             return
@@ -311,13 +312,13 @@ class SessionMapSync:
             raw = json.loads(config.session_map_file.read_text())
         except (json.JSONDecodeError, OSError):  # fmt: skip
             return set()
-        prefix = f"{config.tmux_session_name}:"
+        prefix = f"{config.tmux_session}:"
         result: set[str] = set()
         for key in raw:
             if key.startswith(prefix):
                 wid = key[len(prefix) :]
                 if is_window_id(wid):
-                    result.add(wid)
+                    result.add(key)
             elif key.startswith(EMDASH_SESSION_PREFIX):
                 result.add(key)
         return result
@@ -361,7 +362,7 @@ class SessionMapSync:
         Uses file locking consistent with hook.py. Safe to call from any
         thread (no asyncio handles touched).
         """
-        from .channel_router import channel_router
+        from ..core.channel_router import channel_router
 
         map_file = config.session_map_file
         map_file.parent.mkdir(parents=True, exist_ok=True)
@@ -369,7 +370,7 @@ class SessionMapSync:
         if is_foreign_window(window_id):
             window_key = window_id
         else:
-            window_key = f"{config.tmux_session_name}:{window_id}"
+            window_key = f"{config.tmux_session}:{window_id}"
         lock_path = map_file.with_suffix(".lock")
         try:
             with open(lock_path, "w") as lock_f:
@@ -429,7 +430,7 @@ class SessionMapSync:
                 fcntl.flock(lock_f, fcntl.LOCK_EX)
                 try:
                     raw = json.loads(config.session_map_file.read_text())
-                    key = f"{config.tmux_session_name}:{window_id}"
+                    key = window_id if is_foreign_window(window_id) else f"{config.tmux_session}:{window_id}"
                     if key in raw:
                         del raw[key]
                         atomic_write_json(config.session_map_file, raw)
@@ -456,7 +457,7 @@ class SessionMapSync:
 
         Returns True if any state was changed.
         """
-        from .channel_router import channel_router
+        from ..core.channel_router import channel_router
         from ..tmux.window_state_store import window_store
 
         new_sid = info.get("session_id", "")

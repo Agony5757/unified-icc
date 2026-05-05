@@ -248,7 +248,7 @@ class SessionManager:
         ]
 
         # Snapshot old key→display_name mapping for mailbox migration
-        tmux_session = config.tmux_session_name
+        tmux_session = config.tmux_session
         old_display = {
             wid: channel_router.window_display_names.get(wid, "")
             for wid in self.window_states
@@ -353,7 +353,7 @@ class SessionManager:
             if is_foreign_window(wid):
                 qualified_live.add(wid)
             else:
-                qualified_live.add(f"{config.tmux_session_name}:{wid}")
+                qualified_live.add(f"{config.tmux_session}:{wid}")
         from ..utils.mailbox import Mailbox
 
         Mailbox(config.mailbox_dir).prune_dead(qualified_live)
@@ -383,7 +383,7 @@ class SessionManager:
             raw = json.loads(config.session_map_file.read_text())
         except (json.JSONDecodeError, OSError):  # fmt: skip
             return set()
-        prefix = f"{config.tmux_session_name}:"
+        prefix = f"{config.tmux_session}:"
         result: set[str] = set()
         for key in raw:
             if key.startswith(prefix):

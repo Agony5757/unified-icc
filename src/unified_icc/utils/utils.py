@@ -79,7 +79,7 @@ def unified_icc_dir() -> Path:
 
 def tmux_session_name() -> str:
     """Get tmux session name from TMUX_SESSION_NAME env var or default 'cclark'."""
-    return os.environ.get("TMUX_SESSION_NAME", "cclark")
+    return os.environ.get("TMUX_SESSION_NAME", "unified-icc")
 
 
 # --- JSON utilities -----------------------------------------------------------

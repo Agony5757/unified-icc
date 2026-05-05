@@ -1,0 +1,535 @@
+"""Feishu WebSocket long-connection client.
+
+Implements the Feishu proprietary binary protocol:
+  1. POST /callback/ws/endpoint → get wss:// URL
+  2. Connect to WebSocket, receive protobuf Frames
+  3. Decode Frames → dispatch message events to registered handlers
+  4. Send pong frames for ping, auto-reconnect on disconnect
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import random
+import structlog
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
+
+import websockets
+
+from unified_icc.channels.feishu.event_parsers import parse_message_event
+
+logger = structlog.get_logger()
+
+# ── Protocol constants ────────────────────────────────────────────────────────
+
+_WS_ENDPOINT_URI = "/callback/ws/endpoint"
+_BASE_URL = "https://open.feishu.cn"
+
+# Frame method (protobuf field 4, wire varint)
+_METHOD_CONTROL = 0
+_METHOD_DATA = 1
+
+# Header keys
+_HDR_TYPE = "type"
+_TYPE_EVENT = "event"
+_TYPE_PING = "ping"
+_TYPE_PONG = "pong"
+
+# ── Protobuf encoding helpers ────────────────────────────────────────────────
+
+# Wire types: 0=varint, 2=length-delimited, 5=32-bit
+_WIRE_VARINT = 0
+_WIRE_64BIT = 1
+_WIRE_LENGTH_DELIMITED = 2
+_WIRE_32BIT = 5
+
+# Protobuf field numbers in Frame
+_FIELD_SEQ_ID = 1
+_FIELD_LOG_ID = 2
+_FIELD_SERVICE = 3
+_FIELD_METHOD = 4
+_FIELD_HEADERS = 5
+_FIELD_ENCODING = 6
+_FIELD_TYPE = 7
+_FIELD_PAYLOAD = 8
+
+# Protobuf field numbers in Header (nested)
+_HDR_FIELD_KEY = 1
+_HDR_FIELD_VALUE = 2
+
+_VARINT_7BIT_MASK = 0x7F
+_VARINT_CONTINUATION_BIT = 0x80
+_UINT64_MASK = 0xFFFFFFFFFFFFFFFF
+
+
+def _encode_varint(value: int) -> bytes:
+    if value < 0:
+        # Python negative int → two's complement varint
+        value &= _UINT64_MASK
+    result = bytearray()
+    while value > _VARINT_7BIT_MASK:
+        result.append((value & _VARINT_7BIT_MASK) | _VARINT_CONTINUATION_BIT)
+        value >>= 7
+    result.append(value & _VARINT_7BIT_MASK)
+    return bytes(result)
+
+
+def _decode_varint(data: bytes, pos: int) -> tuple[int, int]:
+    result = 0
+    shift = 0
+    while True:
+        b = data[pos]
+        pos += 1
+        result |= (b & _VARINT_7BIT_MASK) << shift
+        if not (b & _VARINT_CONTINUATION_BIT):
+            break
+        shift += 7
+    return result, pos
+
+
+def _encode_field(field_num: int, wire_type: int, encoded: bytes) -> bytes:
+    tag = _encode_varint((field_num << 3) | wire_type)
+    if wire_type == _WIRE_LENGTH_DELIMITED:
+        return tag + _encode_varint(len(encoded)) + encoded
+    return tag + encoded
+
+
+def _encode_string(value: str | bytes) -> bytes:
+    if isinstance(value, str):
+        value = value.encode("utf-8")
+    return _encode_varint(len(value)) + value
+
+
+def _encode_frame_headers(headers: list[tuple[str, str]]) -> bytes:
+    out = b""
+    for key, value in headers:
+        key_bytes = key.encode("utf-8")
+        value_bytes = value.encode("utf-8")
+        out += _encode_field(_HDR_FIELD_KEY, _WIRE_LENGTH_DELIMITED, key_bytes)
+        out += _encode_field(_HDR_FIELD_VALUE, _WIRE_LENGTH_DELIMITED, value_bytes)
+    return out
+
+
+def encode_frame(
+    method: int,
+    payload: bytes,
+    headers: list[tuple[str, str]],
+    service_id: int,
+    seq_id: int = 0,
+) -> bytes:
+    """Encode a binary protobuf Frame."""
+    out = b""
+    out += _encode_field(_FIELD_SEQ_ID, _WIRE_VARINT, _encode_varint(seq_id))
+    out += _encode_field(_FIELD_LOG_ID, _WIRE_VARINT, _encode_varint(0))
+    out += _encode_field(_FIELD_SERVICE, _WIRE_VARINT, _encode_varint(service_id))
+    out += _encode_field(_FIELD_METHOD, _WIRE_VARINT, _encode_varint(method))
+    hdrs_bytes = _encode_frame_headers(headers)
+    out += _encode_field(_FIELD_HEADERS, _WIRE_LENGTH_DELIMITED, hdrs_bytes)
+    out += _encode_field(_FIELD_ENCODING, _WIRE_LENGTH_DELIMITED, b"")
+    out += _encode_field(_FIELD_TYPE, _WIRE_LENGTH_DELIMITED, b"")
+    out += _encode_field(_FIELD_PAYLOAD, _WIRE_LENGTH_DELIMITED, payload)
+    return out
+
+
+def decode_frame(data: bytes) -> tuple[dict[str, str], bytes, int, int]:
+    """Decode a binary protobuf Frame (Feishu WS v2)."""
+    pos = 0
+    end = len(data)
+    headers: dict[str, str] = {}
+    payload = b""
+    service_id = 0
+    method = 0
+
+    while pos < end:
+        b = data[pos]
+        pos += 1
+        field_num = b >> 3
+        wire = b & 7
+
+        if wire == _WIRE_VARINT:
+            val, pos = _decode_varint(data, pos)
+        elif wire == _WIRE_LENGTH_DELIMITED:
+            length, p2 = _decode_varint(data, pos)
+            pos = p2
+            val = data[pos : pos + length]
+            pos += length
+        else:
+            val = None
+
+        if field_num == _FIELD_SERVICE:
+            service_id = int(val) if isinstance(val, int) else 0
+        elif field_num == _FIELD_METHOD:
+            method = int(val) if isinstance(val, int) else 0
+        elif field_num == _FIELD_HEADERS:
+            assert isinstance(val, bytes)
+            headers_bytes: bytes = val
+            hp = 0
+            hdr_list: list[tuple[str, str]] = []
+            while hp < len(headers_bytes):
+                b2 = headers_bytes[hp]
+                hp += 1
+                if (b2 >> 3) == _HDR_FIELD_KEY and (b2 & 7) == _WIRE_LENGTH_DELIMITED:
+                    l2, hp2 = _decode_varint(headers_bytes, hp)
+                    hp = hp2
+                    key = headers_bytes[hp : hp + l2].decode("utf-8")
+                    hp += l2
+                    b3 = headers_bytes[hp]
+                    hp += 1
+                    if (b3 >> 3) == _HDR_FIELD_VALUE and (b3 & 7) == _WIRE_LENGTH_DELIMITED:
+                        l3, hp3 = _decode_varint(headers_bytes, hp)
+                        hp = hp3
+                        value = headers_bytes[hp : hp + l3].decode("utf-8")
+                        hp += l3
+                        hdr_list.append((key, value))
+                    else:
+                        break
+                else:
+                    break
+            headers = dict(hdr_list)
+        elif field_num == _FIELD_PAYLOAD:
+            payload = val if isinstance(val, bytes) else b""
+
+    return headers, payload, service_id, method
+
+
+# ── Ping frame (pre-built, stateless) ───────────────────────────────────────
+
+_ping_frame: bytes | None = None
+
+
+def _get_ping_frame(service_id: int) -> bytes:
+    global _ping_frame
+    if _ping_frame is None:
+        _ping_frame = encode_frame(
+            _METHOD_CONTROL, b"", [(_HDR_TYPE, _TYPE_PING)], service_id
+        )
+    return _ping_frame
+
+
+# ── Deduplication state ───────────────────────────────────────────────────────
+
+_SEEN_STATE_PATH = Path.home() / ".unified-icc" / "seen_events.json"
+_seen_events: set[str] = set()
+_seen_messages: set[str] = set()
+
+
+def _load_seen_state() -> None:
+    """Load deduplication state from disk on startup."""
+    global _seen_events, _seen_messages
+    if not _SEEN_STATE_PATH.exists():
+        return
+    try:
+        with _SEEN_STATE_PATH.open() as f:
+            data = json.load(f)
+        _seen_events = set(data.get("events", []))
+        _seen_messages = set(data.get("messages", []))
+        logger.debug(
+            "Seen state loaded: %d events, %d messages",
+            len(_seen_events),
+            len(_seen_messages),
+        )
+    except (OSError, json.JSONDecodeError):
+        logger.warning("Failed to load seen state, starting fresh")
+        _seen_events = set()
+        _seen_messages = set()
+
+
+def _save_seen_state() -> None:
+    """Persist deduplication state to disk."""
+    try:
+        _SEEN_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _SEEN_STATE_PATH.open("w") as f:
+            json.dump(
+                {"events": list(_seen_events), "messages": list(_seen_messages)}, f
+            )
+    except OSError:
+        logger.warning("Failed to save seen state")
+
+
+# Load persisted state on import
+_load_seen_state()
+
+
+# ── WebSocket client ─────────────────────────────────────────────────────────
+
+
+class FeishuWSClient:
+    """Feishu WebSocket long-connection client with auto-reconnect."""
+
+    def __init__(
+        self,
+        app_id: str,
+        app_secret: str,
+        app_name: str = "default",
+        allowed_users: set[str] | None = None,
+        on_message: Any = None,
+        ping_interval: float = 90.0,
+        reconnect_interval: float = 5.0,
+        reconnect_nonce: float = 3.0,
+    ) -> None:
+        self._app_id = app_id
+        self._app_secret = app_secret
+        self._app_name = app_name
+        self._allowed_users = allowed_users
+        self._on_message = on_message
+        self._ping_interval = ping_interval
+        self._reconnect_interval = reconnect_interval
+        self._reconnect_nonce = reconnect_nonce
+        self._service_id = 0
+        self._running = False
+        self._ws: Any = None
+        self._ping_task: asyncio.Task[None] | None = None
+        self._receive_task: asyncio.Task[None] | None = None
+
+    # ── Public API ─────────────────────────────────────────────────────────
+
+    async def start(self) -> None:
+        """Start the WebSocket client. Blocks until stopped."""
+        self._running = True
+        reconnect_count = 0
+        while self._running:
+            try:
+                await self._connect_and_receive()
+            except asyncio.CancelledError:
+                logger.info("WS client cancelled")
+                break
+            except (
+                OSError,
+                websockets.WebSocketException,
+                ConnectionError,
+                TimeoutError,
+            ) as e:
+                if not self._running:
+                    break
+                reconnect_count += 1
+                delay = self._reconnect_interval + random.uniform(
+                    0, self._reconnect_nonce
+                )
+                logger.warning(
+                    "WS disconnected: %s, reconnecting in %.1fs (attempt %d)",
+                    e,
+                    delay,
+                    reconnect_count,
+                )
+                await asyncio.sleep(delay)
+
+    async def stop(self) -> None:
+        """Stop the client gracefully."""
+        self._running = False
+        if self._ws is not None:
+            await self._ws.close()
+        if self._ping_task:
+            self._ping_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._ping_task
+        if self._receive_task:
+            self._receive_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._receive_task
+        logger.info("WS client stopped")
+
+    # ── Internal ────────────────────────────────────────────────────────────
+
+    async def _get_ws_url(self) -> str:
+        """Fetch the WebSocket connection URL from Feishu."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=10, trust_env=False) as client:
+            resp = await client.post(
+                f"{_BASE_URL}{_WS_ENDPOINT_URI}",
+                json={"AppID": self._app_id, "AppSecret": self._app_secret},
+                headers={"locale": "zh"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code") != 0:
+                raise FeishuWSError(f"endpoint error: {data.get('msg')}")
+            url = data["data"]["URL"]  # Feishu API returns uppercase "URL"
+            client_config = data["data"].get("ClientConfig", {})
+            self._ping_interval = client_config.get("PingInterval", self._ping_interval)
+            self._reconnect_interval = client_config.get(
+                "ReconnectInterval", self._reconnect_interval
+            )
+            logger.debug(
+                "WS endpoint received: ping_interval=%ds reconnect_interval=%ds",
+                self._ping_interval,
+                self._reconnect_interval,
+            )
+            return url
+
+    async def _connect_and_receive(self) -> None:
+        """Connect to the WebSocket and run the receive loop."""
+        ws_url = await self._get_ws_url()
+        _headers, _payload, service_id, _method = await self._handshake(ws_url)
+        self._service_id = service_id
+        logger.info("WS connected: service_id=%d", service_id)
+
+        # Start ping loop
+        self._ping_task = asyncio.create_task(self._ping_loop())
+
+        # Receive loop
+        try:
+            async for raw in self._ws:
+                raw_type = type(raw).__name__
+                raw_len = len(raw) if raw else 0
+                logger.debug("WS recv: type=%s len=%d", raw_type, raw_len)
+                await self._handle_frame(raw)
+        except websockets.ConnectionClosed as e:
+            logger.warning("WS connection closed: code=%s reason=%s", e.code, e.reason)
+            raise
+
+    async def _handshake(self, ws_url: str) -> tuple[dict[str, str], bytes, int, int]:
+        """Perform WebSocket handshake and return initial frame info."""
+        logger.info("WS connecting to: %s", ws_url[:80])
+        self._ws = await websockets.connect(
+            ws_url,
+            ping_interval=None,
+            open_timeout=30,
+        )
+        try:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=5)
+            headers, payload, service_id, method = decode_frame(raw)
+            logger.debug(
+                "WS handshake: method=%d headers=%s payload_len=%d",
+                method,
+                headers,
+                len(payload),
+            )
+            return headers, payload, service_id, method
+        except asyncio.TimeoutError:
+            logger.debug("WS handshake: no initial frame within 5s, proceeding")
+            return {}, b"", 0, 0
+
+    async def _ping_loop(self) -> None:
+        """Send periodic ping frames."""
+        while self._running and self._ws is not None and self._ws.open:
+            await asyncio.sleep(self._ping_interval)
+            if not self._running or self._ws is None or not self._ws.open:
+                break
+            try:
+                await self._ws.send(_get_ping_frame(self._service_id))
+                logger.debug("WS ping sent")
+            except (
+                OSError,
+                websockets.WebSocketException,
+                ConnectionError,
+                TimeoutError,
+            ) as e:
+                logger.warning("WS ping failed, connection may be dead: %s", e)
+                break
+
+    async def _handle_frame(self, raw: bytes | str) -> None:
+        """Decode a raw Frame and dispatch to the appropriate handler."""
+        if isinstance(raw, str):
+            raw = raw.encode("latin1")
+        try:
+            headers, payload, _service_id, method = decode_frame(raw)
+        except Exception:
+            logger.exception("WS frame decode failed: %r", raw[:50])
+            return
+
+        logger.debug(
+            "WS frame: method=%d headers=%s payload_len=%d",
+            method,
+            headers,
+            len(payload),
+        )
+
+        if method == _METHOD_CONTROL:
+            msg_type = headers.get(_HDR_TYPE, "")
+            if msg_type == _TYPE_PING:
+                if self._ws and self._ws.open:
+                    try:
+                        await self._ws.send(_get_ping_frame(self._service_id))
+                    except (
+                        OSError,
+                        websockets.WebSocketException,
+                        ConnectionError,
+                        TimeoutError,
+                    ) as e:
+                        logger.warning("WS pong failed: %s", e)
+            elif msg_type == _TYPE_PONG:
+                logger.debug("WS pong received")
+            return
+
+        await self._dispatch_by_type(_TYPE_EVENT, payload)
+
+    async def _dispatch_by_type(self, msg_type: str, payload: bytes) -> None:
+        """Route a frame to the event handler based on type."""
+        if msg_type == _TYPE_EVENT:
+            await self._dispatch_event(payload)
+
+    async def _dispatch_event(self, payload: bytes) -> None:
+        """Parse and dispatch an inbound message event."""
+        if self._on_message is None:
+            return
+        try:
+            data: dict[str, Any] = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning("WS event payload not JSON: %r", payload[:100])
+            return
+
+        # Parse sender info
+        sender = data.get("event", {}).get("sender", {})
+        sender_type = sender.get("sender_type", "")
+        sender_id = sender.get("sender_id", {}).get("open_id", "")
+        sender_app_id = sender.get("id", "")
+
+        # Self-reply filter
+        is_own_message = sender_type == "app" or sender_app_id == self._app_id
+        if is_own_message:
+            logger.debug(
+                "WS: skipping own message sender_type=%s sender_app_id=%s",
+                sender_type, sender_app_id,
+            )
+            return
+
+        logger.info(
+            "WS recv event: sender_type=%s open_id=%s app_id=%s",
+            sender_type, sender_id, sender_app_id,
+        )
+
+        # Deduplicate by event_id
+        event_id = data.get("header", {}).get("event_id", "")
+        if event_id:
+            if event_id in _seen_events:
+                logger.debug("WS duplicate event skipped: %s", event_id)
+                return
+            _seen_events.add(event_id)
+            _save_seen_state()
+
+        event = parse_message_event(data)
+        if event is None:
+            logger.debug("WS event parse failed, payload keys: %s", list(data.keys()))
+            return
+
+        # Also deduplicate by message_id
+        if event.message_id and event.message_id in _seen_messages:
+            logger.debug("WS duplicate message skipped: %s", event.message_id)
+            return
+        if event.message_id:
+            _seen_messages.add(event.message_id)
+            _save_seen_state()
+
+        # Auth check
+        if self._allowed_users is not None and event.user_id not in self._allowed_users:
+            logger.info(
+                "WS message from unauthorized user %s",
+                event.user_id,
+            )
+            return
+
+        # Annotate event with app context
+        event.app_name = self._app_name
+
+        try:
+            await self._on_message(event)
+        except Exception:
+            logger.exception("WS message handler failed")
+
+
+class FeishuWSError(Exception):
+    """Raised when the Feishu WebSocket endpoint returns an error."""
