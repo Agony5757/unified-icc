@@ -1,7 +1,6 @@
 """Tests for gateway event-type dataclasses."""
 from __future__ import annotations
 
-import pytest
 
 from unified_icc.events.event_types import (
     AgentMessageEvent,

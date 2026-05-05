@@ -1,6 +1,5 @@
 """Tests for process_detection module."""
 
-import pytest
 
 from unified_icc.providers.process_detection import classify_provider_from_args
 

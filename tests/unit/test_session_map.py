@@ -1,6 +1,5 @@
 """Tests for session_map module."""
 
-import pytest
 
 from unified_icc.state.session_map import parse_session_map, parse_emdash_provider
 

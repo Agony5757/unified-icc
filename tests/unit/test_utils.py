@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import pytest
 
 from unified_icc.utils.utils import (
     atomic_write_json,

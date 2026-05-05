@@ -1,7 +1,6 @@
 """Tests for channel_router module."""
 
 import pytest
-from unittest.mock import patch
 
 from unified_icc.core.channel_router import ChannelRouter
 
