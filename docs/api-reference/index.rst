@@ -43,6 +43,56 @@ API 参考
        channel_router,
    )
 
+REST API 参考
+-------------
+
+REST 端点参考文档，包含所有请求/响应模型。
+
+.. toctree::
+   :maxdepth: 1
+
+   rest
+
+WebSocket API 参考
+------------------
+
+WebSocket 双向通信协议参考，包含所有消息类型。
+
+.. toctree::
+   :maxdepth: 1
+
+   websocket
+
+CLI 参考
+--------
+
+``unified-icc server`` 命令行参考。
+
+.. toctree::
+   :maxdepth: 1
+
+   cli
+
+错误码参考
+-----------
+
+HTTP 状态码和 WebSocket 错误消息完整列表。
+
+.. toctree::
+   :maxdepth: 1
+
+   errors
+
+服务器生命周期
+---------------
+
+启动、关闭序列和网关回调机制。
+
+.. toctree::
+   :maxdepth: 1
+
+   server-lifecycle
+
 模块索引
 --------
 
